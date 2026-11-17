@@ -1,7 +1,12 @@
 # FORK: builds the unsigned Windows installer and publishes it as a GitHub
 # Release on LeoRock-13/openwhispr. The installed app auto-updates from there.
 # Run it from the Actions tab ("Fork Release" -> "Run workflow") on the custom branch.
-# The release tag is v<version from package.json>, created by electron-builder.
+# The release tag is v<version from package.json>.
+#
+# The draft release is created up front: electron-builder uploads its files
+# (installer, blockmap, latest.yml) in parallel and each upload creates the
+# release if it is missing, so without a release they race and all but one
+# fail with 422 -- leaving a release without latest.yml, which auto-update needs.
 name: Fork Release
 
 on:
@@ -10,12 +15,39 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: fork-release
+  cancel-in-progress: false
+
 jobs:
   build-windows:
     if: github.repository == 'LeoRock-13/openwhispr'
     runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v7
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Create draft release
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if gh release view "$TAG" --json isDraft --jq .isDraft > is_draft.txt 2>/dev/null; then
+            if [ "$(cat is_draft.txt)" != "true" ]; then
+              echo "::error::Release $TAG is already published. Bump the version in package.json (see FORK.md)."
+              exit 1
+            fi
+            echo "Reusing draft release $TAG"
+          else
+            gh release create "$TAG" --draft --target "$GITHUB_SHA" --title "$TAG" \
+              --notes "OpenWhispr fork build from \`${GITHUB_SHA::9}\` (branch \`$GITHUB_REF_NAME\`)."
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -45,11 +77,27 @@ jobs:
         shell: bash
         run: touch .env
 
-      - name: Build and publish
+      - name: Build and upload to the draft release
         # prebuild:win downloads/compiles every native helper before packaging.
         run: npm run build:win -- --publish always --config electron-builder.fork-win.json
         env:
-          GH_TOKEN: ${{ github.token }}
           GITHUB_TOKEN: ${{ github.token }}
           VITE_AUTH_URL: https://auth.openwhispr.com
           VITE_OPENWHISPR_API_URL: https://api.openwhispr.com
+
+      - name: Check release assets
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          assets="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
+          echo "$assets"
+          for required in latest.yml .exe .exe.blockmap; do
+            echo "$assets" | grep -q -- "$required$" || { echo "::error::Missing $required in $TAG"; exit 1; }
+          done
+
+      - name: Publish release
+        shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh release edit "$TAG" --draft=false --latest

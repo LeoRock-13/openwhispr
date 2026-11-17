@@ -11,8 +11,11 @@ Versione personale di OpenWhispr, con auto-update dalle release di questo fork.
 ## Cosa differisce dall'originale (cercare `FORK:`)
 
 - `src/updater.js`: l'auto-update legge le release di `LeoRock-13/openwhispr`.
-- `electron-builder.fork-win.json`: build Windows non firmata, pubblicata sul fork come release (non draft).
-- `.github/workflows/fork-release.yml`: workflow manuale che compila e pubblica l'installer.
+- `electron-builder.fork-win.json`: build Windows non firmata, caricata sul fork.
+- `.github/workflows/fork-release.yml`: workflow manuale. Crea la release in bozza, ci carica
+  installer + `latest.yml` + blockmap, controlla che ci siano tutti e poi la pubblica. Se la
+  versione è già pubblicata si ferma subito: va alzata la versione.
+- `specs/`: spec, design e task delle modifiche del fork.
 
 ## Numero di versione
 
@@ -30,7 +33,7 @@ Per cambiarla: `npm version 1.12.2 --no-git-tag-version --ignore-scripts`
 ## Fare una release
 
 1. Su `custom`, alzare la versione (vedi sopra) e fare commit + push.
-2. GitHub → Actions → **Fork Release** → *Run workflow* sul branch `custom`.
+2. GitHub → Actions → **Fork Release** → _Run workflow_ sul branch `custom`.
 3. Dopo ~20-30 minuti c'è la release `v<versione>`. L'app installata la trova da sola.
 
 ## Prendere gli aggiornamenti ufficiali
