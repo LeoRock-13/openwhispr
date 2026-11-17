@@ -246,21 +246,26 @@ test("live transcript updates do not restack an already visible dictation window
   assert.deepEqual(calls, []);
 });
 
-test("the first live transcript update still surfaces a hidden dictation window", async () => {
+// FORK: the dictation pill never shows (windowManager FORK_HIDE_DICTATION_PANEL),
+// so a live transcript update reaches the hidden window without surfacing it.
+test("a live transcript update reaches the dictation window without showing it", async () => {
   const manager = new WindowManager();
   const calls = [];
   manager.setOnboardingActive(false);
   manager.mainWindow = {
     isDestroyed: () => false,
     isVisible: () => false,
+    isMinimized: () => false,
     showInactive: () => calls.push("showInactive"),
-    webContents: { send: () => undefined },
+    show: () => calls.push("show"),
+    webContents: { send: (channel) => calls.push(channel) },
   };
   manager.enforceMainWindowOnTop = () => calls.push("onTop");
 
   await manager.showTranscriptionPreview("hello");
+  manager.showDictationPanel({ reposition: false });
 
-  assert.deepEqual(calls, ["showInactive", "onTop"]);
+  assert.deepEqual(calls, ["preview-text"]);
 });
 
 test("compact onboarding exposes the complete window-control contract", () => {

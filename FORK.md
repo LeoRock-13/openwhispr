@@ -30,6 +30,10 @@ Versione personale di OpenWhispr, con auto-update dalle release di questo fork.
     `database.js` (tabelle `note_recordings`, `note_transcript_sources`), `ffmpegUtils.js`, `retentionSettings.js`,
     `preload.js`, `types/electron.ts`, `settingsStore.ts`, `useSettings.ts`, `NoteEditor.tsx`,
     `SettingsPage.tsx`, `MeetingSettings.tsx`, `ControlPanel.tsx`, `locales/*/translation.json`.
+- **Niente pallino della dettatura** (`src/helpers/windowManager.js`, `FORK_HIDE_DICTATION_PANEL`):
+  l'icona flottante non compare mai. La sua finestra resta attiva e nascosta, quindi dettatura, incolla
+  e meeting funzionano come prima. In `SettingsPage.tsx` la sezione "Icona flottante" è nascosta.
+  Rimettere il flag a `false` per tornare al comportamento originale.
 - Fix di un bug upstream, proponibile a loro: il PCM temporaneo della diarizzazione non veniva
   cancellato quando la diarizzazione è disattivata (`_startOrSkipDiarization`).
 

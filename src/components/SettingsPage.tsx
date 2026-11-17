@@ -3430,8 +3430,8 @@ export default function SettingsPage({
             {/* Import from Granola */}
             <GranolaImportSection showAlertDialog={showAlertDialog} />
 
-            {/* Floating Icon */}
-            <div>
+            {/* Floating Icon. FORK: the pill never shows, so its settings are hidden. */}
+            <div hidden>
               <SectionHeader
                 title={t("settingsPage.general.floatingIcon.title")}
                 description={t("settingsPage.general.floatingIcon.description")}

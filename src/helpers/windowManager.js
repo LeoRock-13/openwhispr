@@ -23,6 +23,11 @@ const {
 } = require("./navigationGuard");
 const { pathToFileURL } = require("url");
 const dockManager = require("./dockManager");
+
+// FORK: the floating dictation pill never shows. Its window still runs hidden,
+// so dictation, paste and meetings work as before; recordings are followed
+// from the app (FORK.md).
+const FORK_HIDE_DICTATION_PANEL = true;
 const { i18nMain } = require("./i18nMain");
 const { NotificationDismissTimer, getNotificationTimeoutMs } = require("./notificationTimer");
 const {
@@ -1493,7 +1498,7 @@ class WindowManager {
     this.mainWindow.webContents.send("preview-text", text);
     // Partials arrive several times a second; re-showing a visible window
     // restacks it (and re-fires "show") on every chunk (#1262).
-    if (!this.mainWindow.isVisible()) {
+    if (!this.mainWindow.isVisible() && !FORK_HIDE_DICTATION_PANEL) {
       this.mainWindow.showInactive();
       this.enforceMainWindowOnTop();
     }
@@ -1667,6 +1672,7 @@ class WindowManager {
 
   showDictationPanel(options = {}) {
     if (this._onboardingActive) return;
+    if (FORK_HIDE_DICTATION_PANEL) return;
     const { focus = false, reposition = false, targetPidPromise } = options;
     if (!this.mainWindow || this.mainWindow.isDestroyed()) return;
     if (reposition) {

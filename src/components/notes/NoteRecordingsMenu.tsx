@@ -135,13 +135,14 @@ export default function NoteRecordingsMenu({
               <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
                 {progressText}
               </DropdownMenuLabel>
-              <DropdownMenuItem onSelect={() => cancelRetranscription(noteId)}>
+              <DropdownMenuItem className="gap-2.5" onSelect={() => cancelRetranscription(noteId)}>
                 <X size={14} />
                 {t(`${k}.retranscribe.cancelRun`)}
               </DropdownMenuItem>
             </>
           ) : (
             <DropdownMenuItem
+              className="gap-2.5"
               disabled={otherRunning}
               title={otherRunning ? t(`${k}.retranscribe.busyElsewhere`) : undefined}
               onSelect={() => setDialogOpen(true)}
@@ -152,12 +153,13 @@ export default function NoteRecordingsMenu({
           )}
           <DropdownMenuSeparator />
           <DropdownMenuItem
+            className="gap-2.5"
             onSelect={() => void window.electronAPI?.showNoteRecordingInFolder?.(recordings[0].id)}
           >
             <FolderOpen size={14} />
             {t(`${k}.showInFolder`)}
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => void handleExport()}>
+          <DropdownMenuItem className="gap-2.5" onSelect={() => void handleExport()}>
             <Download size={14} />
             {t(`${k}.export`)}
           </DropdownMenuItem>
