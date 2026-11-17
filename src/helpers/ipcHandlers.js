@@ -16304,12 +16304,15 @@ class IPCHandlers {
 
     const diarizationEnabled = (sessionConfig?.enabled ?? this.speakerDiarizationEnabled) !== false;
 
+    const fs = require("fs");
+
     if (!diarizationEnabled || !this.diarizationManager?.isAvailable() || !rawPcmPath) {
       sendUndiarized();
+      // The capture is only kept for diarization, and nothing else unlinks it:
+      // it sits in os.tmpdir(), outside the stale-temp sweep's directory.
+      if (rawPcmPath) fs.promises.unlink(rawPcmPath).catch(() => {});
       return;
     }
-
-    const fs = require("fs");
 
     const speakerCap = this._resolveSpeakerCap({ sessionConfig, noteId, diarizedSource });
     // Reserved before the async work so a "record more" started while this runs
