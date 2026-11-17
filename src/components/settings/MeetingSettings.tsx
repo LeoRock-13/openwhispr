@@ -7,7 +7,12 @@ import { useTranslation } from "react-i18next";
 import { Cloud, Key, Cpu, Network } from "../icons";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { usePolicyModeOptions, usePolicySnapshot } from "../../hooks/usePolicy";
-import { isModeAllowedByPolicy } from "../../stores/policyRules";
+import {
+  effectiveAudioRetentionDays,
+  effectiveLocalHistoryEnabled,
+  isModeAllowedByPolicy,
+} from "../../stores/policyRules";
+import { usePolicyStore } from "../../stores/policyStore";
 import { requestSignIn } from "../../utils/requestSignIn";
 import { Button } from "../ui/button";
 import { InferenceModeSelector, SettingsRow } from "../ui/SettingsSection";
@@ -50,6 +55,41 @@ function MeetingEchoCancellationRow() {
       description={t("settingsPage.transcription.aec.toggle.description")}
     >
       <Toggle checked={meetingAecEnabled} onChange={setMeetingAecEnabled} />
+    </SettingsRow>
+  );
+}
+
+// FORK: stored meeting audio (specs/meeting-audio-recording). Recording also
+// needs what dictation needs to keep audio: local history on and an audio
+// retention period, so the switch is off and explains why without them.
+function MeetingSaveAudioRow() {
+  const { t } = useTranslation();
+  const saveMeetingAudio = useSettingsStore((s) => s.saveMeetingAudio);
+  const setSaveMeetingAudio = useSettingsStore((s) => s.setSaveMeetingAudio);
+  const audioRetentionDays = useSettingsStore((s) => s.audioRetentionDays);
+  const dataRetentionEnabled = useSettingsStore((s) => s.dataRetentionEnabled);
+  const enforcedAudioRetentionDays = usePolicyStore((policyState) =>
+    effectiveAudioRetentionDays(policyState, audioRetentionDays)
+  );
+  const enforcedDataRetentionEnabled = usePolicyStore((policyState) =>
+    effectiveLocalHistoryEnabled(policyState, dataRetentionEnabled)
+  );
+  const blockedReason = !enforcedDataRetentionEnabled
+    ? t("settings.meeting.saveAudio.blockedHistory")
+    : enforcedAudioRetentionDays <= 0
+      ? t("settings.meeting.saveAudio.blockedRetention")
+      : null;
+
+  return (
+    <SettingsRow
+      label={t("settings.meeting.saveAudio.title")}
+      description={blockedReason ?? t("settings.meeting.saveAudio.description")}
+    >
+      <Toggle
+        checked={saveMeetingAudio && !blockedReason}
+        onChange={setSaveMeetingAudio}
+        disabled={Boolean(blockedReason)}
+      />
     </SettingsRow>
   );
 }
@@ -281,6 +321,7 @@ export function MeetingTranscriptionPanel() {
         renderTranscriptionPicker("local")}
       <MeetingSpeakerDetectionRow />
       <MeetingEchoCancellationRow />
+      <MeetingSaveAudioRow />
     </div>
   );
 }

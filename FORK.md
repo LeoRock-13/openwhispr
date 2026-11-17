@@ -16,6 +16,20 @@ Versione personale di OpenWhispr, con auto-update dalle release di questo fork.
   installer + `latest.yml` + blockmap, controlla che ci siano tutti e poi la pubblica. Se la
   versione è già pubblicata si ferma subito: va alzata la versione.
 - `specs/`: spec, design e task delle modifiche del fork.
+- **Audio dei meeting** (`specs/meeting-audio-recording/`): ogni meeting salva l'audio
+  (WebM/Opus stereo: mic a sinistra, sistema a destra) in `userData/audio/meetings/`, con la stessa
+  conservazione dell'audio delle dettature. Dalla nota, il menu con l'icona onda serve per
+  ritrascrivere con un altro modello, mostrare nella cartella o esportare.
+  - Moduli nuovi: `src/helpers/meetingAudioRecorder.js`, `meetingRecordingStorage.js`,
+    `meetingRetranscribeChunks.js`, `src/services/meetingRetranscription.ts`,
+    `src/utils/meetingRetranscribe{Segments,Models}.ts`,
+    `src/components/notes/{NoteRecordingsMenu,MeetingRetranscribeDialog}.tsx`.
+  - Agganci in file upstream (possibili conflitti al merge): `ipcHandlers.js` (blocchi `FORK:`),
+    `database.js` (tabella `note_recordings`), `ffmpegUtils.js`, `retentionSettings.js`,
+    `preload.js`, `types/electron.ts`, `settingsStore.ts`, `useSettings.ts`, `NoteEditor.tsx`,
+    `SettingsPage.tsx`, `MeetingSettings.tsx`, `locales/*/translation.json`.
+- Fix di un bug upstream, proponibile a loro: il PCM temporaneo della diarizzazione non veniva
+  cancellato quando la diarizzazione è disattivata (`_startOrSkipDiarization`).
 
 ## Numero di versione
 

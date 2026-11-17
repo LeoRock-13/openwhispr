@@ -11352,12 +11352,10 @@ class DatabaseManager {
       .all(cutoffMs);
   }
 
-  getAllNoteRecordingFileNames() {
+  // Unscoped: every account's rows, for reconciling files on disk.
+  getAllNoteRecordings() {
     if (!this.db) throw new Error("Database not initialized");
-    return this.db
-      .prepare("SELECT file_name FROM note_recordings")
-      .all()
-      .map((row) => row.file_name);
+    return this.db.prepare("SELECT * FROM note_recordings ORDER BY started_at").all();
   }
 
   // The active account's recordings only, like the dictation storage figure.

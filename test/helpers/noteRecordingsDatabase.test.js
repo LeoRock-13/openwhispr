@@ -108,7 +108,7 @@ test("hard deleting the note removes its recordings", (t) => {
   db.hardDeleteNote(note.id);
 
   assert.equal(db.getNoteRecordingById("s1"), null);
-  assert.deepEqual(db.getAllNoteRecordingFileNames(), []);
+  assert.deepEqual(db.getAllNoteRecordings(), []);
 });
 
 test("another account's recordings stay out of the scoped reads", (t) => {
@@ -124,7 +124,10 @@ test("another account's recordings stay out of the scoped reads", (t) => {
   assert.deepEqual(db.getVisibleNoteRecordings(), []);
   // Bookkeeping reads stay device-wide.
   assert.equal(db.getNoteRecordingById("s1").id, "s1");
-  assert.deepEqual(db.getAllNoteRecordingFileNames(), ["OpenWhispr-Meeting-s1.webm"]);
+  assert.deepEqual(
+    db.getAllNoteRecordings().map((r) => r.file_name),
+    ["OpenWhispr-Meeting-s1.webm"]
+  );
 });
 
 test("expired recordings are found across accounts and can be deleted", (t) => {

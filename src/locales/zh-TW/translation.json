@@ -54,6 +54,12 @@
       "speakerDetection": {
         "title": "辨識並標記發言者",
         "description": "關閉後，逐字稿會顯示「你」和「其他人」"
+      },
+      "saveAudio": {
+        "title": "Save meeting audio",
+        "description": "Keeps the audio of every meeting (your microphone and the other participants) so you can re-transcribe it later with another model.",
+        "blockedHistory": "Turn on local history in Privacy & Data to save meeting audio.",
+        "blockedRetention": "Choose an audio retention period in Privacy & Data to save meeting audio."
       }
     }
   },
@@ -2353,7 +2359,12 @@
       "clearHistoryAudio": "清除音訊",
       "clearAllAudioConfirm": "刪除所有已儲存的音訊檔案？此操作無法復原。",
       "saveDiscarded": "儲存已捨棄的聽寫",
-      "saveDiscardedDescription": "當你以 Escape 取消聽寫時，將其音訊保留在歷史記錄中以便復原。需要開啟資料與音訊保留。"
+      "saveDiscardedDescription": "當你以 Escape 取消聽寫時，將其音訊保留在歷史記錄中以便復原。需要開啟資料與音訊保留。",
+      "meetingAudioStorage": "Meeting audio",
+      "meetingAudioStorageFiles": "Recordings: {{count}}, {{size}}",
+      "meetingAudioStorageEmpty": "No stored meeting audio",
+      "clearMeetingAudio": "Delete meeting audio",
+      "clearMeetingAudioConfirm": "Delete the stored audio of every meeting? Transcripts and notes are kept. This cannot be undone."
     },
     "prompts": {
       "description": "檢視、自訂和測試用於文字整理和指令偵測的統一系統提示詞",
@@ -4226,6 +4237,35 @@
       "loading": "正在載入筆記…",
       "retry": "無法載入筆記。重試",
       "results": "{{count}} / {{total}} 篇筆記"
+    },
+    "recordings": {
+      "menu": "Meeting audio",
+      "showInFolder": "Show in folder",
+      "export": "Export audio",
+      "exported": "Audio exported (files: {{count}})",
+      "exportFailed": "Couldn't export the audio",
+      "retranscribe": {
+        "menuItem": "Re-transcribe…",
+        "title": "Re-transcribe meeting",
+        "description": "Stored audio: {{duration}} (recordings: {{count}}). It is transcribed again with the model you choose.",
+        "model": "Model",
+        "defaultModel": "Default: {{model}}",
+        "managedModel": "Your organization's model",
+        "selfHostedModel": "Self-hosted server",
+        "localGroup": "On this device",
+        "cloudGroup": "Your API keys",
+        "replaceWarning": "The current transcript will be replaced. Speaker names and edits made by hand to the transcript will be lost. Your notes are not touched.",
+        "analyzing": "Analyzing audio…",
+        "transcribing": "Transcribing {{done}} of {{total}}",
+        "start": "Re-transcribe",
+        "cancel": "Cancel",
+        "close": "Close",
+        "done": "Transcript replaced",
+        "partial": "Parts that could not be transcribed: {{count}}",
+        "noSpeech": "No speech was found in the stored audio.",
+        "failed": "Re-transcription failed: {{error}}. The current transcript was not changed.",
+        "saveFailed": "The new transcript couldn't be saved. The current transcript was not changed."
+      }
     }
   },
   "dictionary": {

@@ -539,6 +539,7 @@ const BOOLEAN_SETTINGS = new Set([
   "noteRecordingSileroEnabled",
   "meetingSileroEnabled",
   "meetingAecEnabled",
+  "saveMeetingAudio",
   "isSignedIn",
   "autoPasteEnabled",
   "keepTranscriptionInClipboard",
@@ -1171,6 +1172,8 @@ export interface SettingsState
   noteRecordingSileroEnabled: boolean;
   meetingSileroEnabled: boolean;
   meetingAecEnabled: boolean;
+  /** FORK: store the audio of every meeting (specs/meeting-audio-recording). */
+  saveMeetingAudio: boolean;
   whisperVadThreshold: number;
   whisperVadMinSpeechDurationMs: number;
   whisperVadMinSilenceDurationMs: number;
@@ -1507,6 +1510,7 @@ export interface SettingsState
   setNoteRecordingSileroEnabled: (value: boolean) => void;
   setMeetingSileroEnabled: (value: boolean) => void;
   setMeetingAecEnabled: (value: boolean) => void;
+  setSaveMeetingAudio: (value: boolean) => void;
   setWhisperVadThreshold: (value: number) => void;
   setWhisperVadMinSpeechDurationMs: (value: number) => void;
   setWhisperVadMinSilenceDurationMs: (value: number) => void;
@@ -1956,6 +1960,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   // Acoustic echo cancellation for meetings is opt-in: on headsets there's no
   // echo to cancel and it can suppress the mic entirely. See ipcHandlers AEC gate.
   meetingAecEnabled: readBoolean("meetingAecEnabled", false),
+  saveMeetingAudio: readBoolean("saveMeetingAudio", true),
   whisperVadThreshold: clampVadValue("threshold", readString("whisperVadThreshold", "0.5")),
   whisperVadMinSpeechDurationMs: clampVadValue(
     "minSpeechDurationMs",
@@ -2831,6 +2836,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
     }
   },
   setMeetingAecEnabled: createBooleanSetter("meetingAecEnabled"),
+  setSaveMeetingAudio: createBooleanSetter("saveMeetingAudio"),
   setWhisperVadThreshold: (value: number) => {
     const next = clampVadValue("threshold", value);
     if (isBrowser) localStorage.setItem("whisperVadThreshold", String(next));

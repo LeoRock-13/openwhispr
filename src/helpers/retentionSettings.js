@@ -35,7 +35,15 @@ function applyRetentionSettings(current, incoming) {
         ? incoming.localHistoryPolicyResolved
         : current.localHistoryPolicyResolved,
   };
+  // FORK: the "save meeting audio" switch. Only carried once a renderer sends
+  // it; missing means on (meetingAudioRecordingAllowed treats it so).
+  const saveMeetingAudio =
+    typeof incoming?.saveMeetingAudio === "boolean"
+      ? incoming.saveMeetingAudio
+      : current.saveMeetingAudio;
+  if (saveMeetingAudio !== undefined) settings.saveMeetingAudio = saveMeetingAudio;
   const changed =
+    settings.saveMeetingAudio !== current.saveMeetingAudio ||
     settings.audioRetentionDays !== current.audioRetentionDays ||
     settings.transcriptRetentionDays !== current.transcriptRetentionDays ||
     settings.dataRetentionEnabled !== current.dataRetentionEnabled ||

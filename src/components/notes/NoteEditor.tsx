@@ -74,6 +74,7 @@ import type { NoteActionProgress } from "../../stores/actionProcessingStore";
 import ActionProcessingOverlay from "./ActionProcessingOverlay";
 import NoteBottomBar from "./NoteBottomBar";
 import NoteRecordControl, { RecordingWave } from "./NoteRecordControl";
+import NoteRecordingsMenu from "./NoteRecordingsMenu";
 import ThemedEmptyIllustration from "../ui/ThemedEmptyIllustration";
 import transcriptsEmptyLight from "../../assets/empty-states/notes-transcripts-light.svg";
 import transcriptsEmptyDark from "../../assets/empty-states/notes-transcripts-dark.svg";
@@ -1400,6 +1401,10 @@ export default function NoteEditor({
                   onStart={handleStartRecording}
                   onStop={onStopRecording}
                 />
+              )}
+              {/* FORK: stored meeting audio (specs/meeting-audio-recording). */}
+              {canEditNote && (
+                <NoteRecordingsMenu noteId={note.id} disabled={isRecording || isProcessing} />
               )}
               <div className={cn(SPLIT_BUTTON_GROUP_CLASS, "h-[30px] shrink-0")}>
                 <button

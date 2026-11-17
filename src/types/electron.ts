@@ -510,6 +510,38 @@ export interface DeviceNotesFailure {
   error: string;
 }
 
+// FORK: one stored meeting recording of a note: a stereo WebM, left = mic
+// (the user), right = system audio (specs/meeting-audio-recording).
+export interface NoteRecording {
+  id: string;
+  note_id: number;
+  file_name: string;
+  file_path: string;
+  /** Epoch ms; the base of the re-transcribed segments' timestamps. */
+  started_at: number;
+  duration_ms: number | null;
+  size_bytes: number | null;
+  created_at: string;
+}
+
+// FORK: a recording split into one mono WAV per channel for re-transcription.
+export interface RetranscribeSourceRecording {
+  id: string;
+  startedAt: number;
+  durationMs: number | null;
+  micPath: string;
+  systemPath: string;
+}
+
+// FORK: one piece of a channel to transcribe on its own; startMs is epoch ms.
+export interface RetranscribeChunk {
+  path: string;
+  source: "mic" | "system";
+  startMs: number;
+  endMs: number;
+  speaker?: string;
+}
+
 export interface NoteItem {
   id: number;
   title: string;
@@ -2005,7 +2037,34 @@ declare global {
         transcriptRetentionDays: number;
         dataRetentionEnabled: boolean;
         localHistoryPolicyResolved: boolean;
+        saveMeetingAudio?: boolean;
       }) => void;
+      // FORK: stored meeting audio (specs/meeting-audio-recording).
+      getNoteRecordings?: (noteId: number) => Promise<NoteRecording[]>;
+      showNoteRecordingInFolder?: (recordingId: string) => Promise<{ success: boolean }>;
+      exportNoteRecordings?: (
+        noteId: number
+      ) => Promise<{ success: boolean; cancelled?: boolean; count?: number; error?: string }>;
+      getMeetingAudioStorageUsage?: () => Promise<{ fileCount: number; totalBytes: number }>;
+      deleteAllMeetingAudio?: () => Promise<{ deleted: number }>;
+      onNoteRecordingsChanged?: (callback: (payload: { noteId: number }) => void) => () => void;
+      splitNoteRecordings?: (
+        noteId: number,
+        requestId: string
+      ) => Promise<
+        | { success: true; jobDir: string; recordings: RetranscribeSourceRecording[] }
+        | { success: false; error: string; code?: string }
+      >;
+      buildRetranscribeChunks?: (options: {
+        jobDir: string;
+        recordingId: string;
+        systemTurns: Array<{ start: number; end: number; speaker: string }> | null;
+        requestId: string;
+      }) => Promise<
+        | { success: true; chunks: RetranscribeChunk[] }
+        | { success: false; error: string; code?: string }
+      >;
+      cleanupRetranscribeJob?: (jobDir: string) => Promise<{ success: boolean }>;
       retryTranscription: (
         id: number,
         settings?: {

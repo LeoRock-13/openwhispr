@@ -220,6 +220,10 @@ const { getTinfoilChatModels } = require("./tinfoilCatalog");
 const { transcribeWithTinfoil } = require("./tinfoilTranscription");
 const { transcribeWithGemini } = require("./geminiTranscription");
 const AudioStorageManager = require("./audioStorage");
+const {
+  MeetingRecordingStorage,
+  meetingAudioRecordingAllowed,
+} = require("./meetingRecordingStorage");
 const { SkillLibrary } = require("./skills/skillLibrary");
 const { registerSkillsIpc } = require("./skills/skillsIpc");
 const LocalModelDownloadStatus = require("./localModelDownloadStatus");
@@ -877,6 +881,13 @@ class IPCHandlers {
     this._textEditHandler = null;
     this._onboardingDemoSession = null;
     this.audioStorageManager = new AudioStorageManager();
+    // FORK: stored meeting audio (specs/meeting-audio-recording).
+    this.meetingRecordingStorage = new MeetingRecordingStorage({
+      baseDir: path.join(app.getPath("userData"), "audio", "meetings"),
+      getDatabase: () => this.databaseManager,
+      onChanged: (noteId) => broadcastToWindows("note-recordings-changed", { noteId }),
+    });
+    this._meetingAudioRecorder = null;
     this.skillLibrary = new SkillLibrary({
       userDataDir: app.getPath("userData"),
       database: this.databaseManager,
@@ -1720,10 +1731,56 @@ class IPCHandlers {
       }
       if (audioRetentionDays > 0) {
         this.audioStorageManager.cleanupExpiredAudio(audioRetentionDays, this.databaseManager);
+        // FORK: meeting audio follows the dictation audio retention.
+        this.meetingRecordingStorage.cleanupExpired(audioRetentionDays);
       }
     } catch (error) {
       debugLogger.error("Retention cleanup failed", { error: error.message }, "audio-storage");
     }
+    try {
+      this.meetingRecordingStorage.reconcileOrphans();
+    } catch (error) {
+      debugLogger.error(
+        "Meeting audio reconcile failed",
+        { error: error.message },
+        "meeting-audio"
+      );
+    }
+  }
+
+  // FORK: stored meeting audio (specs/meeting-audio-recording). The session's
+  // recorder lives on the instance, like _activeMeetingNoteId; the meeting
+  // handlers call these with ?.() so code that rebuilds them in isolation
+  // (tests) runs without a recorder.
+
+  // Same conditions under which dictation keeps its audio.
+  _meetingAudioRecordingAllowed() {
+    return meetingAudioRecordingAllowed(this._retentionSettings, this._retentionSettingsSynced);
+  }
+
+  _startMeetingAudioRecording({ sessionId, noteId, startedAt }) {
+    // A stop that failed partway can leave the previous recorder.
+    this._finalizeMeetingAudioRecording();
+    this._meetingAudioRecorder = this.meetingRecordingStorage.startSession({
+      sessionId,
+      noteId,
+      startedAt,
+      allowed: this._meetingAudioRecordingAllowed(),
+    });
+  }
+
+  // Detaches the recorder first, so a chunk still in flight is ignored, then
+  // encodes in the background: stop never waits for the encode.
+  _finalizeMeetingAudioRecording() {
+    const recorder = this._meetingAudioRecorder;
+    this._meetingAudioRecorder = null;
+    if (recorder) void this.meetingRecordingStorage.finalizeSession(recorder);
+  }
+
+  async _discardMeetingAudioRecording() {
+    const recorder = this._meetingAudioRecorder;
+    this._meetingAudioRecorder = null;
+    if (recorder) await this.meetingRecordingStorage.discardSession(recorder);
   }
 
   _setupTextEditMonitor() {
@@ -2838,6 +2895,108 @@ class IPCHandlers {
       }
       return result;
     });
+
+    // FORK: stored meeting audio (specs/meeting-audio-recording). Every read is
+    // scoped to the active account through the recording's note.
+    ipcMain.handle("note-recordings-list", async (_event, noteId) => {
+      if (!Number.isSafeInteger(noteId)) return [];
+      return this.meetingRecordingStorage.listForNote(noteId);
+    });
+
+    ipcMain.handle("note-recordings-show-in-folder", async (_event, recordingId) => {
+      const recording = this.meetingRecordingStorage.getRecording(recordingId);
+      if (!recording) return { success: false };
+      shell.showItemInFolder(recording.file_path);
+      return { success: true };
+    });
+
+    ipcMain.handle("note-recordings-export", async (event, noteId) => {
+      if (!Number.isSafeInteger(noteId)) return { success: false, error: "Invalid note" };
+      const recordings = this.meetingRecordingStorage.listForNote(noteId);
+      if (recordings.length === 0) return { success: false, error: "No stored audio" };
+      const { dialog } = require("electron");
+      const parent = BrowserWindow.fromWebContents(event.sender);
+      // Modal to the asking window when there is one.
+      const show = (method, options) =>
+        parent ? dialog[method](parent, options) : dialog[method](options);
+      try {
+        if (recordings.length === 1) {
+          const { canceled, filePath } = await show("showSaveDialog", {
+            defaultPath: path.join(app.getPath("downloads"), recordings[0].file_name),
+            filters: [{ name: "WebM audio", extensions: ["webm"] }],
+          });
+          if (canceled || !filePath) return { success: false, cancelled: true };
+          await fs.promises.copyFile(recordings[0].file_path, filePath);
+          return { success: true, count: 1 };
+        }
+        const { canceled, filePaths } = await show("showOpenDialog", {
+          defaultPath: app.getPath("downloads"),
+          properties: ["openDirectory", "createDirectory"],
+        });
+        if (canceled || !filePaths?.[0]) return { success: false, cancelled: true };
+        for (const recording of recordings) {
+          await fs.promises.copyFile(
+            recording.file_path,
+            path.join(filePaths[0], recording.file_name)
+          );
+        }
+        return { success: true, count: recordings.length };
+      } catch (error) {
+        debugLogger.error("Meeting audio export failed", { error: error.message }, "meeting-audio");
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle("meeting-audio-storage-usage", async () =>
+      this.meetingRecordingStorage.getStorageUsage()
+    );
+
+    ipcMain.handle("meeting-audio-delete-all", async () =>
+      this.meetingRecordingStorage.deleteAllVisible()
+    );
+
+    // Re-transcription work runs under the same audio policy and cancel
+    // registry as an upload, so cancel-upload-transcription(requestId) stops it.
+    const runRetranscribeJob = (event, requestId, work) =>
+      runAudioJob(
+        event,
+        "upload",
+        this._uploadCancelRegistry.register(requestId),
+        async (signal) => {
+          try {
+            return await work(signal);
+          } catch (error) {
+            if (error?.name === "AbortError" || signal?.aborted) {
+              return { success: false, error: "Cancelled", code: "UPLOAD_CANCELLED" };
+            }
+            debugLogger.error("Meeting re-transcription step failed", { error: error.message });
+            return { success: false, error: error.message };
+          }
+        }
+      );
+
+    ipcMain.handle("meeting-recordings-split", async (event, noteId, requestId) => {
+      if (!Number.isSafeInteger(noteId)) return { success: false, error: "Invalid note" };
+      return runRetranscribeJob(event, requestId, (signal) =>
+        this.meetingRecordingStorage.splitForRetranscribe(noteId, { signal })
+      );
+    });
+
+    ipcMain.handle("meeting-recordings-build-chunks", async (event, options = {}) => {
+      const { jobDir, recordingId, systemTurns, requestId } = options ?? {};
+      return runRetranscribeJob(event, requestId, (signal) =>
+        this.meetingRecordingStorage.buildRetranscribeChunks({
+          jobDir,
+          recordingId,
+          systemTurns: Array.isArray(systemTurns) ? systemTurns : null,
+          signal,
+        })
+      );
+    });
+
+    ipcMain.handle("meeting-recordings-cleanup-job", async (_event, jobDir) =>
+      this.meetingRecordingStorage.cleanupJob(jobDir)
+    );
 
     ipcMain.handle("get-transcription-by-id", async (event, id) => {
       return this.databaseManager.getTranscriptionById(id);
@@ -4702,6 +4861,18 @@ class IPCHandlers {
 
     // Sweep ow-url-*/ow-diarize-* orphans from crashes or windows closed mid-download.
     require("./urlAudioDownloader").sweepStaleTempArtifacts();
+    // FORK: quitting or crashing mid-meeting leaves its audio in .partial.
+    void Promise.resolve()
+      .then(() => this.meetingRecordingStorage.recoverPartials())
+      .then(() => this.meetingRecordingStorage.reconcileOrphans())
+      .then(() => this.meetingRecordingStorage.sweepStaleJobs())
+      .catch((error) =>
+        debugLogger.error(
+          "Meeting audio recovery failed",
+          { error: error.message },
+          "meeting-audio"
+        )
+      );
 
     handleRemoteProduct("download-url-audio", async (event, url, downloadId) => {
       const id =
@@ -11504,6 +11675,8 @@ class IPCHandlers {
       await settleLocalMeetingTranscription();
       await disconnectMeetingStreaming().catch(() => {});
       resetMeetingLocalState();
+      // FORK: a start that failed records nothing.
+      await this._discardMeetingAudioRecording?.();
       this.activeMeetingSpeakerConfig = null;
     };
 
@@ -11870,6 +12043,12 @@ class IPCHandlers {
           options.speakerIndexBase
         );
         this._activeMeetingNoteId = meetingNoteId;
+        // FORK: stored meeting audio.
+        this._startMeetingAudioRecording?.({
+          sessionId: recordingSessionId,
+          noteId: meetingNoteId,
+          startedAt: meetingStartedAt,
+        });
 
         // Seed the speaker cap from the note/calendar participants up front so live
         // identification isn't stuck at the default if the renderer never pushes a config.
@@ -11990,6 +12169,8 @@ class IPCHandlers {
       )
         return;
       const outboundBuffer = Buffer.isBuffer(audioBuffer) ? audioBuffer : Buffer.from(audioBuffer);
+      // FORK: stored audio is the raw chunk too, like dictation's recording.
+      this._meetingAudioRecorder?.write(source, outboundBuffer, { capturedAt });
       // Auto-end judges "is anyone audible" from the raw chunk of either
       // channel, before AEC/holdback/muting can swallow it.
       if (!synthetic) {
@@ -12318,6 +12499,8 @@ class IPCHandlers {
 
         flushPendingMeetingMicChunks(true);
         await stopMeetingAec();
+        // FORK: every capture is stopped, so the recording is complete.
+        this._finalizeMeetingAudioRecording?.();
 
         const liveSpeakerState = await stopLiveSpeakerIdentification().catch(() => null);
 
@@ -12401,6 +12584,8 @@ class IPCHandlers {
         return { success: true, transcript, diarizationSessionId };
       } catch (error) {
         debugLogger.error("Meeting transcription stop error", { error: error.message });
+        // FORK: keep what was recorded even when teardown failed partway.
+        this._finalizeMeetingAudioRecording?.();
         return { success: false, error: error.message };
       }
     };

@@ -14,7 +14,7 @@ Convenzioni verificate nel repo e applicate al design:
 | Tabelle per nota      | `speaker_mappings`, `note_speaker_embeddings`: `note_id INTEGER … REFERENCES notes(id) ON DELETE CASCADE`, **senza** `account_id` (scope tramite la nota); foreign key attive (better-sqlite3) | `note_recordings` segue lo stesso schema. La CASCADE copre **tutti** i 9 punti che cancellano note (singola, cartella, spazio, account, sync…), senza agganci in `deleteNoteInternal`. I file rimasti senza riga li elimina la riconciliazione (§2.6). |
 | Diarizzazione di file | IPC pubblico `diarize-audio-file` (ipc:5658) con policy, impostazioni, clustering e annullamento per `requestId`                                                                               | La ritrascrizione **chiama quell'IPC** sul canale sistema invece di riscriverne la logica nel main.                                                                                                                                                    |
 | Impostazioni → main   | Un solo canale `retention-settings-changed` (`retentionSettings.js` + `useSettings.ts:202`)                                                                                                    | `saveMeetingAudio` è un campo in più di quel canale (è un'impostazione di conservazione), non un IPC nuovo.                                                                                                                                            |
-| Temp                  | `getSafeTempDir()` + prefissi `ow-*` + sweep 24 h (`urlAudioDownloader.sweepStaleTempArtifacts`)                                                                                               | I file di lavoro della ritrascrizione sono in `getSafeTempDir()/ow-retx-*`. Il prefisso va aggiunto allo sweep e all'allowlist di `delete-temp-file`.                                                                                                  |
+| Temp                  | `getSafeTempDir()` + prefissi `ow-*` + sweep 24 h (`urlAudioDownloader.sweepStaleTempArtifacts`)                                                                                               | I file di lavoro della ritrascrizione sono in `getSafeTempDir()/ow-retx-*`, con uno sweep proprio delle cartelle (§3.1).                                                                                                                               |
 | Test                  | `node --import tsx --test "test/**/*.test.js"`; DB testato con il `DatabaseManager` reale e uno stub di `electron` (`noteFilesDatabase.test.js`); ffmpeg con `harness/wavFixtures`             | Stessi pattern: `test/helpers/noteRecordingsDatabase.test.js`, `test/helpers/ffmpegUtils.test.js` (estensione), `test/helpers/meetingAudioRecorder.test.js`, …                                                                                         |
 | i18n                  | `npm run i18n:check` in CI su 11 locale                                                                                                                                                        | Chiavi in tutte le lingue.                                                                                                                                                                                                                             |
 
@@ -86,15 +86,22 @@ Una istanza per sessione, creata da una factory `createMeetingAudioRecorder({ ba
 
 ### 2.2 Agganci in `ipcHandlers.js`
 
-| Punto                                                                  | Riga circa   | Aggancio                                                                                                                                                                       |
-| ---------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `startMeetingTranscription`, dopo `meetingStartedAt` / `meetingNoteId` | 11822, 11867 | `meetingAudioRecorder = this.meetingRecordings.startSession({ sessionId: recordingSessionId, noteId, startedAt })`: restituisce `null` se il salvataggio non è permesso (§2.4) |
-| `sendMeetingAudio`, subito dopo il controllo di policy                 | 11991        | `meetingAudioRecorder?.write(source, outboundBuffer, { capturedAt, synthetic })`: audio **grezzo**, prima di AEC/gate (D1)                                                     |
-| `stopMeetingTranscription`, prima di `captureMeetingDiarizationState`  | 12342, 12376 | `const rec = meetingAudioRecorder; meetingAudioRecorder = null; void rec?.finalize().then(notify)`: in background, lo stop non aspetta la codifica                             |
-| `resetMeetingLocalState` / `rollbackMeetingTranscriptionStart`         | 11197, 11489 | `meetingAudioRecorder?.discard(); meetingAudioRecorder = null`                                                                                                                 |
-| setup IPC (accanto a `sweepStaleTempArtifacts`)                        | 4704         | `this.meetingRecordings.recoverPartials()` in background                                                                                                                       |
+Il recorder della sessione vive sull'istanza (`this._meetingAudioRecorder`), come
+`this._activeMeetingNoteId`, con tre metodi della classe: `_startMeetingAudioRecording`,
+`_finalizeMeetingAudioRecording` e `_discardMeetingAudioRecording`. Gli agganci li chiamano con `?.()`.
+Diversi test upstream (es. `meetingLocalStopRace.test.js`) ricostruiscono i gestori dei meeting
+incollando pezzi del sorgente in una VM: con variabili di closure andrebbero in `ReferenceError`.
 
-Il chunk renderer ancora in volo dopo lo stop trova `meetingAudioRecorder === null` e viene ignorato.
+| Punto                                                                            | Aggancio                                                                                                              |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `startMeetingTranscription`, dopo `meetingNoteId`                                | `this._startMeetingAudioRecording?.({ sessionId, noteId, startedAt })`: nessun recorder se non permesso (§2.4)        |
+| `sendMeetingAudio`, subito dopo il controllo di policy                           | `this._meetingAudioRecorder?.write(source, outboundBuffer, { capturedAt })`: audio **grezzo**, prima di AEC/gate (D1) |
+| `stopMeetingTranscription`, dopo `stopMeetingAec()` (un solo punto per i 2 rami) | `this._finalizeMeetingAudioRecording?.()`: in background, lo stop non aspetta la codifica                             |
+| `stopMeetingTranscription`, `catch`                                              | `this._finalizeMeetingAudioRecording?.()`: si tiene ciò che è stato registrato anche se lo stop fallisce a metà       |
+| `rollbackMeetingTranscriptionStart`                                              | `await this._discardMeetingAudioRecording?.()`                                                                        |
+| setup IPC (accanto a `sweepStaleTempArtifacts`)                                  | `recoverPartials()` → `reconcileOrphans()` → `sweepStaleJobs()` in background                                         |
+
+Il chunk renderer ancora in volo dopo lo stop trova `this._meetingAudioRecorder === null` e viene ignorato.
 Alla chiusura dell'app (`before-quit` → `performSyncTeardown`, main.js:2310) lo stop del meeting non
 viene chiamato: la cartella `.partial` resta e `recoverPartials()` la codifica al prossimo avvio.
 
@@ -125,9 +132,11 @@ Si registra solo se **tutto** è vero (stessa logica della dettatura, `audioMana
 - nuova impostazione `saveMeetingAudio` (default `true`).
 
 Le prime tre arrivano già nel main (`this._retentionSettings`). `saveMeetingAudio` diventa un
-campo in più dello stesso canale: `DEFAULT_RETENTION_SETTINGS` e `applyRetentionSettings` in
-`retentionSettings.js` (+ test esistente `retentionSettings.test.js`), e `syncRetentionSettings` in
-`useSettings.ts`. Il default `true` vale anche per un renderer che non manda il campo.
+campo in più dello stesso canale (`applyRetentionSettings` in `retentionSettings.js`,
+`syncRetentionSettings` in `useSettings.ts`). Il campo compare nelle impostazioni del main **solo
+quando un renderer lo manda**, e un valore assente vale come attivo. Così gli 8 test upstream che
+confrontano la forma esatta delle impostazioni restano validi, senza modificarli. I test del fork
+sono in `retentionSettingsMeetingAudio.test.js`.
 
 ### 2.5 Database (`database.js`)
 
@@ -159,7 +168,7 @@ Metodi:
   `deleteNoteRecording(id)`;
 - `getExpiredNoteRecordings(cutoffMs)`: **tutti gli account**, come la pulizia audio della
   dettatura ("device-wide", `audioStorage.js:141`);
-- `getAllNoteRecordingFileNames()` per la riconciliazione;
+- `getAllNoteRecordings()` (senza scope) per la riconciliazione file ↔ righe;
 - `getVisibleNoteRecordings()`: registrazioni dell'account attivo, per l'uso disco e "elimina tutto".
 
 **Cancellazione della nota**: nessun aggancio. La `ON DELETE CASCADE` rimuove le righe in tutti i
@@ -200,9 +209,13 @@ Moduli: `src/helpers/meetingRetranscribeChunks.js` (funzioni pure: `segmentBySil
    - un WAV per chunk (`pcm16ToWav`, `src/utils/audioUtils`), con `startMs = startedAt + offset`
      (epoch ms, come i segmenti live).
 4. **IPC `meeting-recordings-cleanup-job(jobDir)`**: il renderer lo chiama sempre a fine lavoro.
-   Accetta solo directory `ow-retx-*` dentro `getSafeTempDir()`, con lo stesso controllo realpath
-   di `delete-temp-file`. In più `ow-retx-` va aggiunto allo sweep dei temp oltre 24 h
-   (`urlAudioDownloader.sweepStaleTempArtifacts`), per i casi di crash.
+   Accetta solo directory `ow-retx-*` figlie dirette di `getSafeTempDir()` (controllo realpath in
+   `resolveJobDir`). Per i casi di crash, `MeetingRecordingStorage.sweepStaleJobs()` all'avvio cancella
+   le cartelle `ow-retx-*` più vecchie di 24 h. Lo sweep upstream (`sweepStaleTempArtifacts`) non va
+   bene: cancella solo file, non cartelle, e così il file upstream resta intatto.
+5. Split e build-chunks girano sotto la stessa policy audio e lo stesso registro di annullamento
+   dell'upload (`runAudioJob(event, "upload", _uploadCancelRegistry.register(requestId))`), quindi
+   `cancel-upload-transcription(requestId)` ferma anche loro.
 
 ### 3.2 Trascrizione nel renderer: `src/services/meetingRetranscription.ts` (nuovo)
 
@@ -231,8 +244,13 @@ retranscribeMeetingNote(noteId, cfg: FileTranscriptionConfig, { onProgress, sign
   La logica va in un helper puro, testabile.
 - Serializza con `serializeTranscriptSegments` e salva con `updateNote(noteId, { transcript })`
   **solo a successo completo**. Se fallisce o viene annullato, il trascritto originale non viene toccato (R5.6).
-- Chunk falliti: se sono meno del 10% → si salva comunque e si mostra "N parti non trascritte";
-  altrimenti errore e niente salvataggio.
+- Chunk falliti: ogni chunk ha un nuovo tentativo dopo 2 s (rate limit). Se restano falliti meno del
+  10% → si salva comunque e si mostra "Parti non trascritte: N"; altrimenti errore e niente salvataggio.
+- Dopo il salvataggio si cancellano le associazioni nome ↔ speaker della nota (`speaker_mappings`),
+  tranne quella di "you". Appartengono alla vecchia numerazione e darebbero nomi sbagliati ai nuovi
+  `speaker_N`.
+- Diarizzazione del canale sistema: attiva se è attivo "Rilevamento speaker" dei meeting e i modelli
+  sono scaricati. Altrimenti il sistema viene diviso per silenzio, senza speaker.
 
 ### 3.3 Scelta del modello (D5)
 
@@ -242,7 +260,7 @@ retranscribeMeetingNote(noteId, cfg: FileTranscriptionConfig, { onProgress, sign
   L'etichetta mostra nome provider + modello, es. "Predefinito: Groq · whisper-large-v3".
 - **Menu "Usa un altro modello"**: un `Select` compatto, non il `TranscriptionModelPicker` intero
   (troppo grande), con:
-  - modelli locali installati (`listLocalTranscriptionModels`, ipc:1447);
+  - modelli locali scaricati (`listWhisperModels` / `listParakeetModels`, già esposti al renderer);
   - i provider cloud BYOK con chiave API configurata e i loro modelli (`getTranscriptionProviders()`
     di ModelRegistry), esclusi quelli streaming-only;
   - OpenWhispr Cloud se l'utente ha fatto l'accesso.

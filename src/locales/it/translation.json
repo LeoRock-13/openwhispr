@@ -54,6 +54,12 @@
       "speakerDetection": {
         "title": "Identifica ed etichetta i partecipanti",
         "description": "Se disattivato, le trascrizioni mostrano \"Tu\" e \"Altri\""
+      },
+      "saveAudio": {
+        "title": "Salva audio dei meeting",
+        "description": "Conserva l'audio di ogni meeting (il tuo microfono e gli altri partecipanti) per poterlo ritrascrivere in seguito con un altro modello.",
+        "blockedHistory": "Attiva la cronologia locale in Privacy e dati per salvare l'audio dei meeting.",
+        "blockedRetention": "Scegli un periodo di conservazione dell'audio in Privacy e dati per salvare l'audio dei meeting."
       }
     }
   },
@@ -2353,7 +2359,12 @@
       "clearHistoryAudio": "Elimina audio",
       "clearAllAudioConfirm": "Eliminare tutti i file audio salvati? Questa azione è irreversibile.",
       "saveDiscarded": "Salva le dettature scartate",
-      "saveDiscardedDescription": "Quando annulli una dettatura con Escape, conserva l'audio nella cronologia per poterla recuperare. Richiede la conservazione di dati e audio attiva."
+      "saveDiscardedDescription": "Quando annulli una dettatura con Escape, conserva l'audio nella cronologia per poterla recuperare. Richiede la conservazione di dati e audio attiva.",
+      "meetingAudioStorage": "Audio dei meeting",
+      "meetingAudioStorageFiles": "Registrazioni: {{count}}, {{size}}",
+      "meetingAudioStorageEmpty": "Nessun audio dei meeting salvato",
+      "clearMeetingAudio": "Elimina audio dei meeting",
+      "clearMeetingAudioConfirm": "Eliminare l'audio salvato di tutti i meeting? Trascritti e note restano. L'operazione non si può annullare."
     },
     "prompts": {
       "description": "Visualizza, personalizza e testa il prompt di sistema unificato che gestisce la correzione del testo e il rilevamento delle istruzioni",
@@ -4226,6 +4237,35 @@
       "loading": "Caricamento delle note…",
       "retry": "Impossibile caricare le note. Riprova",
       "results": "{{count}} di {{total}} note"
+    },
+    "recordings": {
+      "menu": "Audio del meeting",
+      "showInFolder": "Mostra nella cartella",
+      "export": "Esporta audio",
+      "exported": "Audio esportato (file: {{count}})",
+      "exportFailed": "Impossibile esportare l'audio",
+      "retranscribe": {
+        "menuItem": "Ritrascrivi…",
+        "title": "Ritrascrivi il meeting",
+        "description": "Audio salvato: {{duration}} (registrazioni: {{count}}). Viene trascritto di nuovo con il modello che scegli.",
+        "model": "Modello",
+        "defaultModel": "Predefinito: {{model}}",
+        "managedModel": "Il modello della tua organizzazione",
+        "selfHostedModel": "Server self-hosted",
+        "localGroup": "Su questo dispositivo",
+        "cloudGroup": "Le tue chiavi API",
+        "replaceWarning": "Il trascritto attuale sarà sostituito. I nomi degli speaker e le modifiche fatte a mano al trascritto andranno persi. Le tue note non vengono toccate.",
+        "analyzing": "Analisi dell'audio…",
+        "transcribing": "Trascrizione {{done}} di {{total}}",
+        "start": "Ritrascrivi",
+        "cancel": "Annulla",
+        "close": "Chiudi",
+        "done": "Trascritto sostituito",
+        "partial": "Parti non trascritte: {{count}}",
+        "noSpeech": "Nell'audio salvato non è stato trovato parlato.",
+        "failed": "Ritrascrizione non riuscita: {{error}}. Il trascritto attuale non è stato modificato.",
+        "saveFailed": "Impossibile salvare il nuovo trascritto. Il trascritto attuale non è stato modificato."
+      }
     }
   },
   "dictionary": {

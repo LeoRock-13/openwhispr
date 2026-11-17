@@ -199,7 +199,8 @@ function useSettingsInternal() {
   }, []);
 
   // Retention periods are enforced by the main process cleanup sweep
-  const { audioRetentionDays, transcriptRetentionDays, dataRetentionEnabled } = store;
+  const { audioRetentionDays, transcriptRetentionDays, dataRetentionEnabled, saveMeetingAudio } =
+    store;
   const enforcedAudioRetentionDays = usePolicyStore((policyState) =>
     effectiveAudioRetentionDays(policyState, audioRetentionDays)
   );
@@ -217,12 +218,15 @@ function useSettingsInternal() {
       transcriptRetentionDays,
       dataRetentionEnabled: enforcedDataRetentionEnabled,
       localHistoryPolicyResolved,
+      // FORK: specs/meeting-audio-recording.
+      saveMeetingAudio,
     });
   }, [
     enforcedAudioRetentionDays,
     transcriptRetentionDays,
     enforcedDataRetentionEnabled,
     localHistoryPolicyResolved,
+    saveMeetingAudio,
   ]);
 
   // Sync startup pre-warming preferences to main process

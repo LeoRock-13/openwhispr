@@ -54,6 +54,12 @@
       "speakerDetection": {
         "title": "Identifier et étiqueter les intervenants",
         "description": "Lorsque désactivé, les transcriptions affichent « Vous » et « Autres »"
+      },
+      "saveAudio": {
+        "title": "Save meeting audio",
+        "description": "Keeps the audio of every meeting (your microphone and the other participants) so you can re-transcribe it later with another model.",
+        "blockedHistory": "Turn on local history in Privacy & Data to save meeting audio.",
+        "blockedRetention": "Choose an audio retention period in Privacy & Data to save meeting audio."
       }
     }
   },
@@ -3113,7 +3119,12 @@
       "lastSynced": "Dernière synchronisation {{time}}",
       "minutesAgo": "il y a {{count}}min",
       "saveDiscarded": "Enregistrer les dictées abandonnées",
-      "saveDiscardedDescription": "Quand vous annulez une dictée avec Échap, conserve son audio dans l'historique pour pouvoir la récupérer. Nécessite la conservation des données et de l'audio."
+      "saveDiscardedDescription": "Quand vous annulez une dictée avec Échap, conserve son audio dans l'historique pour pouvoir la récupérer. Nécessite la conservation des données et de l'audio.",
+      "meetingAudioStorage": "Meeting audio",
+      "meetingAudioStorageFiles": "Recordings: {{count}}, {{size}}",
+      "meetingAudioStorageEmpty": "No stored meeting audio",
+      "clearMeetingAudio": "Delete meeting audio",
+      "clearMeetingAudioConfirm": "Delete the stored audio of every meeting? Transcripts and notes are kept. This cannot be undone."
     },
     "prompts": {
       "description": "Affichez, personnalisez et testez le prompt système unifié qui gère la correction du texte et la détection des instructions",
@@ -4791,6 +4802,35 @@
       "loading": "Chargement des notes…",
       "retry": "Impossible de charger les notes. Réessayer",
       "results": "{{count}} sur {{total}} notes"
+    },
+    "recordings": {
+      "menu": "Meeting audio",
+      "showInFolder": "Show in folder",
+      "export": "Export audio",
+      "exported": "Audio exported (files: {{count}})",
+      "exportFailed": "Couldn't export the audio",
+      "retranscribe": {
+        "menuItem": "Re-transcribe…",
+        "title": "Re-transcribe meeting",
+        "description": "Stored audio: {{duration}} (recordings: {{count}}). It is transcribed again with the model you choose.",
+        "model": "Model",
+        "defaultModel": "Default: {{model}}",
+        "managedModel": "Your organization's model",
+        "selfHostedModel": "Self-hosted server",
+        "localGroup": "On this device",
+        "cloudGroup": "Your API keys",
+        "replaceWarning": "The current transcript will be replaced. Speaker names and edits made by hand to the transcript will be lost. Your notes are not touched.",
+        "analyzing": "Analyzing audio…",
+        "transcribing": "Transcribing {{done}} of {{total}}",
+        "start": "Re-transcribe",
+        "cancel": "Cancel",
+        "close": "Close",
+        "done": "Transcript replaced",
+        "partial": "Parts that could not be transcribed: {{count}}",
+        "noSpeech": "No speech was found in the stored audio.",
+        "failed": "Re-transcription failed: {{error}}. The current transcript was not changed.",
+        "saveFailed": "The new transcript couldn't be saved. The current transcript was not changed."
+      }
     }
   },
   "dictionary": {

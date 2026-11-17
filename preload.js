@@ -200,6 +200,22 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getAudioStorageUsage: () => ipcRenderer.invoke("get-audio-storage-usage"),
   deleteAllAudio: () => ipcRenderer.invoke("delete-all-audio"),
   syncRetentionSettings: (settings) => ipcRenderer.send("retention-settings-changed", settings),
+  // FORK: stored meeting audio (specs/meeting-audio-recording).
+  getNoteRecordings: (noteId) => ipcRenderer.invoke("note-recordings-list", noteId),
+  showNoteRecordingInFolder: (recordingId) =>
+    ipcRenderer.invoke("note-recordings-show-in-folder", recordingId),
+  exportNoteRecordings: (noteId) => ipcRenderer.invoke("note-recordings-export", noteId),
+  getMeetingAudioStorageUsage: () => ipcRenderer.invoke("meeting-audio-storage-usage"),
+  deleteAllMeetingAudio: () => ipcRenderer.invoke("meeting-audio-delete-all"),
+  onNoteRecordingsChanged: registerListener(
+    "note-recordings-changed",
+    (callback) => (_event, payload) => callback(payload)
+  ),
+  splitNoteRecordings: (noteId, requestId) =>
+    ipcRenderer.invoke("meeting-recordings-split", noteId, requestId),
+  buildRetranscribeChunks: (options) =>
+    ipcRenderer.invoke("meeting-recordings-build-chunks", options),
+  cleanupRetranscribeJob: (jobDir) => ipcRenderer.invoke("meeting-recordings-cleanup-job", jobDir),
   retryTranscription: (id, settings) => ipcRenderer.invoke("retry-transcription", id, settings),
   updateTranscriptionText: (id, text, rawText) =>
     ipcRenderer.invoke("update-transcription-text", id, text, rawText),
