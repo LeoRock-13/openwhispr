@@ -64,9 +64,10 @@ class UpdateManager {
     );
     autoUpdater.httpExecutor = this.httpExecutor;
 
+    // FORK: updates come from LeoRock-13/openwhispr releases, not the official repo.
     autoUpdater.setFeedURL({
       provider: "github",
-      owner: "OpenWhispr",
+      owner: "LeoRock-13",
       repo: "openwhispr",
       private: false,
     });

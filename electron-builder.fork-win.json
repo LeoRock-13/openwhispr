@@ -1,0 +1,17 @@
+{
+  "extends": "electron-builder.json",
+  "extraMetadata": {
+    "windowsTrayIdentity": false
+  },
+  "win": {
+    "azureSignOptions": null,
+    "forceCodeSigning": false
+  },
+  "publish": {
+    "provider": "github",
+    "owner": "LeoRock-13",
+    "repo": "openwhispr",
+    "private": false,
+    "releaseType": "release"
+  }
+}

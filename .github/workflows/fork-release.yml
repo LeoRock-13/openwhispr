@@ -1,0 +1,55 @@
+# FORK: builds the unsigned Windows installer and publishes it as a GitHub
+# Release on LeoRock-13/openwhispr. The installed app auto-updates from there.
+# Run it from the Actions tab ("Fork Release" -> "Run workflow") on the custom branch.
+# The release tag is v<version from package.json>, created by electron-builder.
+name: Fork Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    if: github.repository == 'LeoRock-13/openwhispr'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Setup MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install platform-specific native binaries
+        run: npm install @rollup/rollup-win32-x64-msvc lightningcss-win32-x64-msvc @tailwindcss/oxide-win32-x64-msvc --no-save
+
+      - name: Cache Electron
+        uses: actions/cache@v4
+        with:
+          path: ~/AppData/Local/electron/Cache
+          key: windows-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: windows-electron-
+
+      - name: Create runtime env
+        # The official OAuth client IDs are secrets of the upstream repo; add
+        # your own here (as repo secrets) if you want those integrations.
+        shell: bash
+        run: touch .env
+
+      - name: Build and publish
+        # prebuild:win downloads/compiles every native helper before packaging.
+        run: npm run build:win -- --publish always --config electron-builder.fork-win.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          VITE_AUTH_URL: https://auth.openwhispr.com
+          VITE_OPENWHISPR_API_URL: https://api.openwhispr.com
