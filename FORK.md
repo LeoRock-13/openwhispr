@@ -21,13 +21,15 @@ Versione personale di OpenWhispr, con auto-update dalle release di questo fork.
   conservazione dell'audio delle dettature. Dalla nota, il menu con l'icona onda serve per
   ritrascrivere con un altro modello, mostrare nella cartella o esportare.
   - Moduli nuovi: `src/helpers/meetingAudioRecorder.js`, `meetingRecordingStorage.js`,
-    `meetingRetranscribeChunks.js`, `src/services/meetingRetranscription.ts`,
-    `src/utils/meetingRetranscribe{Segments,Models}.ts`,
-    `src/components/notes/{NoteRecordingsMenu,MeetingRetranscribeDialog}.tsx`.
+    `meetingRetranscribeChunks.js`, `meetingTranscriptSource.js`,
+    `src/services/meetingRetranscription.ts`, `src/stores/meetingRetranscribeStore.ts`,
+    `src/utils/meetingRetranscribe{Segments,Models}.ts`, `src/utils/transcriptSource.ts`,
+    `src/components/notes/{NoteRecordingsMenu,MeetingRetranscribeDialog,MeetingRetranscribeToastListener}.tsx`,
+    `src/components/notes/useTranscriptModelLabel.ts`.
   - Agganci in file upstream (possibili conflitti al merge): `ipcHandlers.js` (blocchi `FORK:`),
-    `database.js` (tabella `note_recordings`), `ffmpegUtils.js`, `retentionSettings.js`,
+    `database.js` (tabelle `note_recordings`, `note_transcript_sources`), `ffmpegUtils.js`, `retentionSettings.js`,
     `preload.js`, `types/electron.ts`, `settingsStore.ts`, `useSettings.ts`, `NoteEditor.tsx`,
-    `SettingsPage.tsx`, `MeetingSettings.tsx`, `locales/*/translation.json`.
+    `SettingsPage.tsx`, `MeetingSettings.tsx`, `ControlPanel.tsx`, `locales/*/translation.json`.
 - Fix di un bug upstream, proponibile a loro: il PCM temporaneo della diarizzazione non veniva
   cancellato quando la diarizzazione è disattivata (`_startOrSkipDiarization`).
 

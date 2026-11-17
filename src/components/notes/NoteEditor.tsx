@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   Users,
   AlertTriangle,
+  RefreshCw,
 } from "../icons";
 import ShareNoteDialog, { type NoteExportOption } from "./ShareNoteDialog";
 import { reconcileLocalShareState } from "./shareNoteRules";
@@ -75,6 +76,11 @@ import ActionProcessingOverlay from "./ActionProcessingOverlay";
 import NoteBottomBar from "./NoteBottomBar";
 import NoteRecordControl, { RecordingWave } from "./NoteRecordControl";
 import NoteRecordingsMenu from "./NoteRecordingsMenu";
+import { useNoteTranscriptSource } from "./useTranscriptModelLabel";
+import {
+  takeSummaryRequest,
+  useMeetingRetranscribeStore,
+} from "../../stores/meetingRetranscribeStore";
 import ThemedEmptyIllustration from "../ui/ThemedEmptyIllustration";
 import transcriptsEmptyLight from "../../assets/empty-states/notes-transcripts-light.svg";
 import transcriptsEmptyDark from "../../assets/empty-states/notes-transcripts-dark.svg";
@@ -517,6 +523,38 @@ export default function NoteEditor({
   useEffect(() => {
     initializeActions();
   }, []);
+
+  // FORK: a re-transcription replaced the transcript under this summary
+  // (specs/meeting-audio-recording/design.md §3.4). The summary is out of date
+  // until it is regenerated (its material hash moves on) or the user dismisses it.
+  const transcriptSource = useNoteTranscriptSource(note.id);
+  const regenerateTemplate = noteTemplate ?? defaultTemplate;
+  const summaryOutdatedByRetranscription =
+    !!enhancement?.isStale &&
+    !!transcriptSource?.stale_summary_hash &&
+    transcriptSource.stale_summary_hash === note.enhanced_at_content_hash &&
+    canRunTemplate &&
+    !!regenerateTemplate;
+  const regenerateSummary = useCallback(() => {
+    if (regenerateTemplate) onRunNoteAction?.(regenerateTemplate);
+  }, [onRunNoteAction, regenerateTemplate]);
+  const dismissOutdatedSummary = useCallback(() => {
+    void window.electronAPI?.clearStaleSummaryHash?.(note.id);
+  }, [note.id]);
+  // "Regenerate summary" from the re-transcription toast, once this note is on screen.
+  const summaryRequest = useMeetingRetranscribeStore((s) => s.summaryRequest);
+  useEffect(() => {
+    if (summaryRequest !== note.id || isActionRunning) return;
+    if (!takeSummaryRequest(note.id)) return;
+    if (canRunTemplate && regenerateTemplate) onRunNoteAction?.(regenerateTemplate);
+  }, [
+    summaryRequest,
+    note.id,
+    isActionRunning,
+    canRunTemplate,
+    regenerateTemplate,
+    onRunNoteAction,
+  ]);
 
   const hasChatSegments = displaySegments.length > 0;
   const showSummaryCallout =
@@ -1404,7 +1442,7 @@ export default function NoteEditor({
               )}
               {/* FORK: stored meeting audio (specs/meeting-audio-recording). */}
               {canEditNote && (
-                <NoteRecordingsMenu noteId={note.id} disabled={isRecording || isProcessing} />
+                <NoteRecordingsMenu noteId={note.id} hidden={isRecording} disabled={isProcessing} />
               )}
               <div className={cn(SPLIT_BUTTON_GROUP_CLASS, "h-[30px] shrink-0")}>
                 <button
@@ -1580,13 +1618,43 @@ export default function NoteEditor({
                 )}
               </div>
             ) : viewMode === "enhanced" && enhancement ? (
-              <RichTextEditor
-                key="enhanced"
-                value={enhancement.content}
-                onChange={handleEnhancedChange}
-                disabled={!canEditNote}
-                mentionPeople={mentionPeople}
-              />
+              <>
+                {/* FORK: summary written before a re-transcription. */}
+                {summaryOutdatedByRetranscription && (
+                  <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-amber-400/30 bg-amber-400/5 px-3 py-2 text-xs text-foreground/80">
+                    <AlertTriangle size={14} className="shrink-0 text-amber-500" />
+                    <span className="min-w-0 flex-1">
+                      {t("notes.recordings.retranscribe.summaryOutdatedBanner")}
+                    </span>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs"
+                        onClick={dismissOutdatedSummary}
+                      >
+                        {t("notes.recordings.retranscribe.dismiss")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="h-7 gap-1.5 px-2.5 text-xs"
+                        disabled={isActionRunning}
+                        onClick={regenerateSummary}
+                      >
+                        <RefreshCw size={12} />
+                        {t("notes.recordings.retranscribe.regenerateSummary")}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                <RichTextEditor
+                  key="enhanced"
+                  value={enhancement.content}
+                  onChange={handleEnhancedChange}
+                  disabled={!canEditNote}
+                  mentionPeople={mentionPeople}
+                />
+              </>
             ) : (
               <RichTextEditor
                 key="raw"
@@ -1650,29 +1718,45 @@ export default function NoteEditor({
             actionChips={offersActions && <ActionChips {...chipProps} />}
             slashCommands={actionCommands}
             callout={
-              showSummaryCallout &&
-              defaultTemplate &&
-              selectedSegmentIds.size === 0 && (
+              // FORK: the summary tab shows its own banner for this.
+              summaryOutdatedByRetranscription &&
+              viewMode !== "enhanced" &&
+              selectedSegmentIds.size === 0 ? (
                 <Button
                   className="h-9 max-w-full min-w-0 gap-2 px-4 text-sm"
-                  aria-label={summaryCalloutLabel}
-                  onClick={() => onRunNoteAction?.(defaultTemplate)}
+                  disabled={isActionRunning}
+                  onClick={regenerateSummary}
                 >
-                  <AlignLeft size={16} className="shrink-0" />
+                  <RefreshCw size={16} className="shrink-0" />
                   <span className="truncate">
-                    {isDefaultAiSummary ? (
-                      summaryCalloutLabel
-                    ) : (
-                      <BidiInterpolatedText
-                        text={t("notes.editor.generateWithTemplate", {
-                          template: BIDI_VALUE_TOKEN,
-                        })}
-                        value={getActionName(defaultTemplate, t)}
-                        dir="auto"
-                      />
-                    )}
+                    {t("notes.recordings.retranscribe.regenerateSummary")}
                   </span>
                 </Button>
+              ) : (
+                showSummaryCallout &&
+                defaultTemplate &&
+                selectedSegmentIds.size === 0 && (
+                  <Button
+                    className="h-9 max-w-full min-w-0 gap-2 px-4 text-sm"
+                    aria-label={summaryCalloutLabel}
+                    onClick={() => onRunNoteAction?.(defaultTemplate)}
+                  >
+                    <AlignLeft size={16} className="shrink-0" />
+                    <span className="truncate">
+                      {isDefaultAiSummary ? (
+                        summaryCalloutLabel
+                      ) : (
+                        <BidiInterpolatedText
+                          text={t("notes.editor.generateWithTemplate", {
+                            template: BIDI_VALUE_TOKEN,
+                          })}
+                          value={getActionName(defaultTemplate, t)}
+                          dir="auto"
+                        />
+                      )}
+                    </span>
+                  </Button>
+                )
               )
             }
             footnote={

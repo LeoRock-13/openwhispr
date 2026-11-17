@@ -4270,7 +4270,30 @@
         "partial": "Parts that could not be transcribed: {{count}}",
         "noSpeech": "No speech was found in the stored audio.",
         "failed": "Re-transcription failed: {{error}}. The current transcript was not changed.",
-        "saveFailed": "The new transcript couldn't be saved. The current transcript was not changed."
+        "saveFailed": "The new transcript couldn't be saved. The current transcript was not changed.",
+        "currentModel": "Current transcript: {{model}}",
+        "backgroundHint": "It runs in the background: you can close this window and keep using the app. Progress shows on the note's Audio button.",
+        "busyElsewhere": "Another note is being re-transcribed. Wait for it to finish.",
+        "cancelRun": "Cancel re-transcription",
+        "openNote": "Open note",
+        "failedTitle": "Re-transcription failed",
+        "regenerateSummary": "Regenerate summary",
+        "summaryOutdated": "The AI summary is based on the previous transcript.",
+        "doneDescription": "The new transcript is in the note.",
+        "summaryOutdatedBanner": "This summary was written before the re-transcription and doesn't reflect the new transcript.",
+        "dismiss": "Dismiss",
+        "changedDuringRun": "The transcript changed during the re-transcription (a new recording or an edit), so it wasn't replaced. Try again."
+      },
+      "source": {
+        "title": "Transcribed with {{model}}",
+        "live": "Live, during the meeting",
+        "liveMixed": "Live, with parts written by other models",
+        "retranscribed": "Re-transcribed on {{date}}",
+        "notRecorded": "Transcript model not recorded",
+        "unknownModel": "unknown model"
+      },
+      "pill": {
+        "analyzing": "Analyzing…"
       }
     }
   },

@@ -3,7 +3,7 @@
 Riferimenti: [spec.md](spec.md), [design.md](design.md). Ogni task si chiude con i propri test verdi.
 Ordine pensato perché ogni blocco sia verificabile da solo.
 
-Stato al 2026-11-17: sviluppo completato. Restano le verifiche manuali (B6, D6) e la release (E3).
+Stato al 2026-11-17: sviluppo completato, inclusa la revisione UX (F). Restano le verifiche manuali (B6, D6, F5) e la release (E3).
 
 ## A. Fondamenta
 
@@ -48,6 +48,19 @@ Stato al 2026-11-17: sviluppo completato. Restano le verifiche manuali (B6, D6) 
 - [x] **D5** `MeetingRetranscribeDialog.tsx` + voce "Ritrascrivi…" nel menu Audio (design §3.4).
 - [ ] **D6** Verifica manuale: ritrascrizione di un meeting reale con modello locale e con uno cloud;
       annullamento a metà (trascritto originale intatto); nota con 2 sessioni.
+
+## F. Revisione UX (dopo la prima revisione)
+
+- [x] **F1** Ritrascrizione in background: `meetingRetranscribeStore` + toast listener; il dialog chiude
+      all'avvio (design §3.4).
+- [x] **F2** Pillola Audio nello stile del pulsante di registrazione, nascosta durante la registrazione,
+      con avanzamento e annullamento (design §3.4).
+- [x] **F3** Riassunto superato dopo la ritrascrizione: "Rigenera riassunto" nel toast, barra nella scheda
+      del riassunto, callout nelle altre schede (design §3.4).
+- [x] **F4** Modello del trascritto: tabella `note_transcript_sources`, registrazione dal vivo e dopo la
+      ritrascrizione, mostrato nel menu e nel dialog + test (design §3.5).
+- [ ] **F5** Verifica manuale: ritrascrizione lasciata in background cambiando nota, toast e
+      rigenerazione del riassunto, modello mostrato dopo un meeting e dopo una ritrascrizione.
 
 ## E. Chiusura
 

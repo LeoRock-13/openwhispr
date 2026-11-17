@@ -4264,7 +4264,30 @@
         "partial": "Parti non trascritte: {{count}}",
         "noSpeech": "Nell'audio salvato non è stato trovato parlato.",
         "failed": "Ritrascrizione non riuscita: {{error}}. Il trascritto attuale non è stato modificato.",
-        "saveFailed": "Impossibile salvare il nuovo trascritto. Il trascritto attuale non è stato modificato."
+        "saveFailed": "Impossibile salvare il nuovo trascritto. Il trascritto attuale non è stato modificato.",
+        "currentModel": "Trascritto attuale: {{model}}",
+        "backgroundHint": "Continua in background: puoi chiudere questa finestra e usare l'app. L'avanzamento si vede sul pulsante Audio della nota.",
+        "busyElsewhere": "È già in corso la ritrascrizione di un'altra nota. Aspetta che finisca.",
+        "cancelRun": "Annulla ritrascrizione",
+        "openNote": "Apri nota",
+        "failedTitle": "Ritrascrizione non riuscita",
+        "regenerateSummary": "Rigenera riassunto",
+        "summaryOutdated": "Il riassunto AI si basa sul trascritto precedente.",
+        "doneDescription": "Il nuovo trascritto è nella nota.",
+        "summaryOutdatedBanner": "Questo riassunto è stato scritto prima della ritrascrizione e non tiene conto del nuovo trascritto.",
+        "dismiss": "Ignora",
+        "changedDuringRun": "Il trascritto è cambiato durante la ritrascrizione (nuova registrazione o modifica), quindi non è stato sostituito. Riprova."
+      },
+      "source": {
+        "title": "Trascritto con {{model}}",
+        "live": "Dal vivo, durante il meeting",
+        "liveMixed": "Dal vivo, con parti scritte da altri modelli",
+        "retranscribed": "Ritrascritto il {{date}}",
+        "notRecorded": "Modello del trascritto non registrato",
+        "unknownModel": "modello sconosciuto"
+      },
+      "pill": {
+        "analyzing": "Analisi…"
       }
     }
   },

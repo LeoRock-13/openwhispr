@@ -146,3 +146,85 @@ test("expired recordings are found across accounts and can be deleted", (t) => {
   assert.deepEqual(db.deleteNoteRecording("old"), { success: false });
   assert.deepEqual(db.getExpiredNoteRecordings(2000), []);
 });
+
+// Transcript model (design §3.5).
+
+test("a live meeting records its model; the same model again stays unmixed", (t) => {
+  const db = setup(t);
+  if (!db) return;
+  const note = db.saveNote("Weekly sync", "", "meeting").note;
+
+  db.recordLiveTranscriptSource(note.id, { engine: "local:nvidia", model: "parakeet" }, 1000);
+  const again = db.recordLiveTranscriptSource(
+    note.id,
+    { engine: "local:nvidia", model: "parakeet" },
+    2000
+  );
+
+  assert.equal(again.source, "live");
+  assert.equal(again.mixed, 0);
+  assert.equal(again.updated_at, 2000);
+  assert.equal(db.getNoteTranscriptSource(note.id).model, "parakeet");
+});
+
+test("another model, or text from before recording, marks the transcript mixed", (t) => {
+  const db = setup(t);
+  if (!db) return;
+  const note = db.saveNote("Weekly sync", "", "meeting").note;
+  db.recordLiveTranscriptSource(note.id, { engine: "local:nvidia", model: "parakeet" });
+  const switched = db.recordLiveTranscriptSource(note.id, { engine: "openwhispr", model: "x" });
+  assert.equal(switched.engine, "openwhispr");
+  assert.equal(switched.mixed, 1);
+
+  const older = db.saveNote("Old meeting", "", "meeting").note;
+  db.updateNote(older.id, { transcript: '[{"text":"hello"}]' });
+  assert.equal(
+    db.recordLiveTranscriptSource(older.id, { engine: "openwhispr", model: null }).mixed,
+    1
+  );
+});
+
+test("a re-transcription replaces the source and keeps the summary hash to compare", (t) => {
+  const db = setup(t);
+  if (!db) return;
+  const note = db.saveNote("Weekly sync", "", "meeting").note;
+  db.recordLiveTranscriptSource(note.id, { engine: "local:nvidia", model: "parakeet" });
+  db.recordLiveTranscriptSource(note.id, { engine: "openwhispr", model: null });
+
+  const row = db.recordRetranscribedSource(note.id, {
+    engine: "byok:groq",
+    model: "whisper-large-v3",
+    staleSummaryHash: "hash-1",
+  });
+  assert.equal(row.source, "retranscribed");
+  assert.equal(row.mixed, 0);
+  assert.equal(row.stale_summary_hash, "hash-1");
+
+  // A later live session keeps the hash and notes the mix.
+  const live = db.recordLiveTranscriptSource(note.id, {
+    engine: "byok:groq",
+    model: "whisper-large-v3",
+  });
+  assert.equal(live.mixed, 1);
+  assert.equal(live.stale_summary_hash, "hash-1");
+
+  assert.deepEqual(db.clearStaleSummaryHash(note.id), { success: true });
+  assert.equal(db.getNoteTranscriptSource(note.id).stale_summary_hash, null);
+});
+
+test("transcript sources are scoped to the account and go with the note", (t) => {
+  const db = setup(t, "account-a");
+  if (!db) return;
+  const note = db.saveNote("Weekly sync", "", "meeting").note;
+  db.recordLiveTranscriptSource(note.id, { engine: "openwhispr", model: null });
+
+  db.setActiveAccountId("account-b");
+  assert.equal(db.getNoteTranscriptSource(note.id), null);
+  assert.equal(db.recordRetranscribedSource(note.id, { engine: "openwhispr" }), null);
+  assert.deepEqual(db.clearStaleSummaryHash(note.id), { success: false });
+
+  db.setActiveAccountId("account-a");
+  db.hardDeleteNote(note.id);
+  assert.equal(db.getNoteTranscriptSource(note.id), null);
+  assert.equal(db.recordLiveTranscriptSource(note.id, { engine: "openwhispr" }), null);
+});

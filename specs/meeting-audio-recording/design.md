@@ -270,23 +270,58 @@ retranscribeMeetingNote(noteId, cfg: FileTranscriptionConfig, { onProgress, sign
 
 ### 3.4 UI
 
-- **NoteEditor** (`NoteEditor.tsx` ~1390-1423, accanto a Share): pulsante icona "Audio" con menu,
-  visibile solo se la nota ha registrazioni:
-  - "Ritrascrivi…" → dialog;
-  - "Mostra nella cartella" → `shell.showItemInFolder` del primo file;
-  - "Esporta audio" → 1 registrazione: dialog "Salva con nome"; più registrazioni: scelta cartella,
-    poi copia di tutte.
-  - Disabilitato mentre la nota sta registrando.
-- **Dialog di ritrascrizione** (`MeetingRetranscribeDialog.tsx`, nuovo):
-  1. scelta modello (§3.3), durata totale dell'audio, avviso di sostituzione: "Il trascritto attuale
-     sarà sostituito. Nomi degli speaker e correzioni fatte a mano andranno persi."
-  2. "Ritrascrivi" → avanzamento ("Analisi audio…", poi "Trascrizione 12/48") con "Annulla";
-  3. fine: toast di successo, oppure messaggio di errore; il trascritto originale resta intatto.
+Rivista dopo la prima revisione (2026-11-17): la ritrascrizione non deve bloccare l'app e il riassunto
+non deve restare silenziosamente vecchio.
+
+- **Pillola Audio** (`NoteRecordingsMenu.tsx`, in NoteEditor subito dopo il pulsante di registrazione e
+  nel suo stile): una pillola arrotondata con icona onda e durata dell'audio ("1 h 12 min"). È nascosta
+  mentre la nota registra e ricompare a registrazione finita. Durante una ritrascrizione mostra
+  l'avanzamento ("12/48" con spinner, bordo primario come la pillola di registrazione). Il menu ha:
+  - in testa, il modello che ha scritto il trascritto (§3.5);
+  - "Ritrascrivi…" → dialog (disabilitato se è in corso la ritrascrizione di un'altra nota), oppure,
+    durante la ritrascrizione di questa nota, l'avanzamento e "Annulla ritrascrizione";
+  - "Mostra nella cartella" → `shell.showItemInFolder` del primo file (sono tutti nella stessa cartella);
+  - "Esporta audio" → 1 registrazione: dialog "Salva con nome"; più registrazioni: scelta cartella.
+- **Dialog di ritrascrizione** (`MeetingRetranscribeDialog.tsx`): scelta modello (§3.3), durata
+  dell'audio, modello attuale, avviso di sostituzione. "Ritrascrivi" consegna il lavoro allo store e
+  chiude il dialog.
+- **Background** (`stores/meetingRetranscribeStore.ts`): una ritrascrizione alla volta, che continua
+  cambiando nota o vista; si ferma solo chiudendo l'app (il trascritto originale resta) o se cambia
+  l'account del database (scope del database, non della credenziale, che risulta "uscito" durante la
+  rotazione del token). A fine lavoro salva, registra il modello e mette in coda un evento. Se nel
+  frattempo il trascritto è cambiato (nuova sessione registrata o modifica a mano) non lo sostituisce e
+  lo dice, perché la sostituzione cancellerebbe quella parte.
+- **Esito** (`MeetingRetranscribeToastListener.tsx`, montato in ControlPanel): toast di successo con il
+  titolo della nota; se la nota aveva un riassunto, il toast lo segnala e offre "Rigenera riassunto"
+  (apre la nota se serve e la rigenera con il suo template appena l'editor è a schermo); altrimenti
+  "Apri nota" se non la si sta guardando. Errori come toast rosso. Gli eventi aspettano il focus della
+  finestra, come l'Undo delle azioni.
+- **Riassunto superato**: al salvataggio si conserva l'hash del materiale del riassunto di allora
+  (`stale_summary_hash`). Finché il riassunto ha ancora quell'hash ed è segnato come stale, la scheda
+  del riassunto mostra una barra "scritto prima della ritrascrizione" con "Rigenera riassunto" e
+  "Ignora"; nelle altre schede il callout in basso offre "Rigenera riassunto". Rigenerarlo cambia
+  l'hash e la barra sparisce; "Ignora" azzera `stale_summary_hash`. Una modifica normale alle note non
+  la fa comparire (resta solo il puntino stale dell'originale).
 - **Impostazioni meeting** (`MeetingSettings.tsx`): interruttore "Salva audio dei meeting".
   Se la conservazione audio è a 0 o la cronologia locale è disattivata, l'interruttore è disabilitato e
   mostra il perché.
 - **i18n**: chiavi sotto `notes.recordings.*` e `settings.meeting.saveAudio*` in **tutti gli 11**
   locale (`npm run i18n:check` lo richiede in CI): en e it tradotti, gli altri in inglese come ripiego.
+
+### 3.5 Modello del trascritto
+
+Tabella solo del fork, solo locale (mai sincronizzata) `note_transcript_sources`
+(`note_id` PK, FK CASCADE su `notes`; `source` live/retranscribed, `engine`, `model`, `mixed`,
+`stale_summary_hash`, `updated_at`). Vocabolario `engine`: `local:<whisper|nvidia|cohere>`,
+`openwhispr`, `byok:<provider>`, `self-hosted`, `enterprise`.
+
+- **Dal vivo**: `meeting-transcription-start` chiama `_recordLiveTranscriptSource` con le opzioni del
+  meeting (`meetingTranscriptSource.js`). `mixed = 1` se la nota aveva già testo senza record, o se il
+  record precedente era di un altro modello o una ritrascrizione.
+- **Ritrascrizione**: il renderer ricava engine/model dalla config usata
+  (`utils/transcriptSource.ts`) e chiama `note-transcript-source-retranscribed`; `mixed = 0`.
+- Letture e scritture dal renderer sono limitate all'account attivo tramite la nota. Le note registrate
+  prima di questa versione mostrano "Modello del trascritto non registrato".
 
 ## 4. Bug upstream da correggere insieme
 

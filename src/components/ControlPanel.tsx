@@ -102,6 +102,7 @@ import { applyChineseScript, resolveChineseScriptTarget } from "../utils/chinese
 import { getAgentName } from "../utils/agentName";
 import HistoryView from "./HistoryView";
 import BackgroundActionToastListener from "./notes/BackgroundActionToastListener";
+import MeetingRetranscribeToastListener from "./notes/MeetingRetranscribeToastListener";
 import AssistantNoteUndoListener from "./notes/AssistantNoteUndoListener";
 import { providerErrorActions, providerErrorToastProps } from "../utils/describeProviderError";
 import SpaceSyncToastListener from "./notes/SpaceSyncToastListener";
@@ -669,6 +670,15 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
       setActiveView("personal-notes");
     },
     []
+  );
+  // FORK: a toast about a re-transcribed note opens it (specs/meeting-audio-recording).
+  const openRetranscribedNote = useCallback(
+    (noteId: number) => {
+      setShowSettings(false);
+      setSettingsSection(undefined);
+      openNoteInNotes(noteId, null);
+    },
+    [openNoteInNotes]
   );
   const openChatSourceNote = useCallback(
     (note: SourceNote) => openNoteInNotes(note.id, note.folderId, note.spaceId),
@@ -1515,6 +1525,8 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
         </main>
       </div>
       <BackgroundActionToastListener />
+      {/* FORK: background meeting re-transcription (specs/meeting-audio-recording). */}
+      <MeetingRetranscribeToastListener onOpenNote={openRetranscribedNote} />
       <AssistantNoteUndoListener />
       <SpaceSyncToastListener />
       <SharedDictionaryArrivalToastListener onViewWords={showDictionary} />

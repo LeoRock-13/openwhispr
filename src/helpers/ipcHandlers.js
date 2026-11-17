@@ -224,6 +224,8 @@ const {
   MeetingRecordingStorage,
   meetingAudioRecordingAllowed,
 } = require("./meetingRecordingStorage");
+// FORK: transcript model of a meeting note.
+const { describeLiveMeetingModel } = require("./meetingTranscriptSource");
 const { SkillLibrary } = require("./skills/skillLibrary");
 const { registerSkillsIpc } = require("./skills/skillsIpc");
 const LocalModelDownloadStatus = require("./localModelDownloadStatus");
@@ -1758,6 +1760,21 @@ class IPCHandlers {
     return meetingAudioRecordingAllowed(this._retentionSettings, this._retentionSettingsSynced);
   }
 
+  // FORK: which model writes this note's transcript (shown in the note's Audio menu).
+  _recordLiveTranscriptSource(noteId, options) {
+    if (noteId == null) return;
+    try {
+      this.databaseManager.recordLiveTranscriptSource(noteId, describeLiveMeetingModel(options));
+      broadcastToWindows("note-transcript-source-changed", { noteId });
+    } catch (error) {
+      debugLogger.warn(
+        "Recording the transcript model failed",
+        { error: error.message },
+        "meeting-audio"
+      );
+    }
+  }
+
   _startMeetingAudioRecording({ sessionId, noteId, startedAt }) {
     // A stop that failed partway can leave the previous recorder.
     this._finalizeMeetingAudioRecording();
@@ -2945,6 +2962,30 @@ class IPCHandlers {
         debugLogger.error("Meeting audio export failed", { error: error.message }, "meeting-audio");
         return { success: false, error: error.message };
       }
+    });
+
+    ipcMain.handle("note-transcript-source-get", async (_event, noteId) => {
+      if (!Number.isSafeInteger(noteId)) return null;
+      return this.databaseManager.getNoteTranscriptSource(noteId);
+    });
+
+    ipcMain.handle("note-transcript-source-retranscribed", async (_event, noteId, info) => {
+      if (!Number.isSafeInteger(noteId) || typeof info?.engine !== "string") return null;
+      const row = this.databaseManager.recordRetranscribedSource(noteId, {
+        engine: info.engine.slice(0, 64),
+        model: typeof info.model === "string" ? info.model.slice(0, 200) : null,
+        staleSummaryHash:
+          typeof info.staleSummaryHash === "string" ? info.staleSummaryHash.slice(0, 128) : null,
+      });
+      if (row) broadcastToWindows("note-transcript-source-changed", { noteId });
+      return row;
+    });
+
+    ipcMain.handle("note-transcript-source-clear-stale-summary", async (_event, noteId) => {
+      if (!Number.isSafeInteger(noteId)) return { success: false };
+      const result = this.databaseManager.clearStaleSummaryHash(noteId);
+      if (result.success) broadcastToWindows("note-transcript-source-changed", { noteId });
+      return result;
     });
 
     ipcMain.handle("meeting-audio-storage-usage", async () =>
@@ -12049,6 +12090,7 @@ class IPCHandlers {
           noteId: meetingNoteId,
           startedAt: meetingStartedAt,
         });
+        this._recordLiveTranscriptSource?.(meetingNoteId, options);
 
         // Seed the speaker cap from the note/calendar participants up front so live
         // identification isn't stuck at the default if the renderer never pushes a config.

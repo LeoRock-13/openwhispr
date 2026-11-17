@@ -512,6 +512,17 @@ export interface DeviceNotesFailure {
 
 // FORK: one stored meeting recording of a note: a stereo WebM, left = mic
 // (the user), right = system audio (specs/meeting-audio-recording).
+// FORK: which model wrote a note's transcript.
+export interface NoteTranscriptSource {
+  note_id: number;
+  source: "live" | "retranscribed";
+  engine: string;
+  model: string | null;
+  mixed: number;
+  stale_summary_hash: string | null;
+  updated_at: number;
+}
+
 export interface NoteRecording {
   id: string;
   note_id: number;
@@ -2065,6 +2076,15 @@ declare global {
         | { success: false; error: string; code?: string }
       >;
       cleanupRetranscribeJob?: (jobDir: string) => Promise<{ success: boolean }>;
+      getNoteTranscriptSource?: (noteId: number) => Promise<NoteTranscriptSource | null>;
+      recordRetranscribedSource?: (
+        noteId: number,
+        info: { engine: string; model: string | null; staleSummaryHash: string | null }
+      ) => Promise<NoteTranscriptSource | null>;
+      clearStaleSummaryHash?: (noteId: number) => Promise<{ success: boolean }>;
+      onNoteTranscriptSourceChanged?: (
+        callback: (payload: { noteId: number }) => void
+      ) => () => void;
       retryTranscription: (
         id: number,
         settings?: {

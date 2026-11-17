@@ -1807,6 +1807,22 @@ class DatabaseManager {
       this.db.exec(
         "CREATE INDEX IF NOT EXISTS idx_note_recordings_note ON note_recordings(note_id, started_at)"
       );
+      // FORK: which model wrote a note's transcript (live during the meeting or
+      // a later re-transcription). Device-only, never synced. stale_summary_hash
+      // is the summary's material hash when a re-transcription replaced the
+      // transcript, so the note can offer to regenerate that summary.
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS note_transcript_sources (
+          note_id INTEGER PRIMARY KEY,
+          source TEXT NOT NULL,
+          engine TEXT NOT NULL,
+          model TEXT,
+          mixed INTEGER NOT NULL DEFAULT 0,
+          stale_summary_hash TEXT,
+          updated_at INTEGER NOT NULL,
+          FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
+        )
+      `);
 
       // A cloud folder delete is optimistic until the API answers. Keep the
       // exact pre-delete row state in a durable journal so a permission denial
@@ -11365,6 +11381,80 @@ class DatabaseManager {
     return this.db
       .prepare(`SELECT r.* FROM ${scope.from} WHERE ${scope.sql} ORDER BY r.started_at`)
       .all(...scope.params);
+  }
+
+  // FORK: transcript model (see specs/meeting-audio-recording/design.md §3.5).
+
+  _isNoteVisible(noteId) {
+    const scope = this._accountScopeCondition("n");
+    return Boolean(
+      this.db
+        .prepare(`SELECT 1 FROM notes n WHERE n.id = ? AND ${scope.sql}`)
+        .get(noteId, ...scope.params)
+    );
+  }
+
+  // Unscoped: main records it when a meeting starts on the note. A note that
+  // already had transcript text, or a model other than the recorded one, is
+  // marked mixed: the transcript now holds parts written by different models.
+  recordLiveTranscriptSource(noteId, { engine, model = null }, now = Date.now()) {
+    if (!this.db) throw new Error("Database not initialized");
+    const note = this.db.prepare("SELECT transcript FROM notes WHERE id = ?").get(noteId);
+    if (!note) return null;
+    const existing = this.db
+      .prepare("SELECT * FROM note_transcript_sources WHERE note_id = ?")
+      .get(noteId);
+    const mixed = existing
+      ? existing.mixed === 1 ||
+        existing.source !== "live" ||
+        existing.engine !== engine ||
+        (existing.model ?? null) !== (model ?? null)
+      : Boolean(note.transcript && String(note.transcript).trim());
+    this.db
+      .prepare(
+        `INSERT INTO note_transcript_sources
+           (note_id, source, engine, model, mixed, stale_summary_hash, updated_at)
+         VALUES (?, 'live', ?, ?, ?, ?, ?)
+         ON CONFLICT(note_id) DO UPDATE SET
+           source = 'live', engine = excluded.engine, model = excluded.model,
+           mixed = excluded.mixed, updated_at = excluded.updated_at`
+      )
+      .run(noteId, engine, model, mixed ? 1 : 0, existing?.stale_summary_hash ?? null, now);
+    return this.db.prepare("SELECT * FROM note_transcript_sources WHERE note_id = ?").get(noteId);
+  }
+
+  recordRetranscribedSource(
+    noteId,
+    { engine, model = null, staleSummaryHash = null },
+    now = Date.now()
+  ) {
+    if (!this.db) throw new Error("Database not initialized");
+    if (!this._isNoteVisible(noteId)) return null;
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO note_transcript_sources
+           (note_id, source, engine, model, mixed, stale_summary_hash, updated_at)
+         VALUES (?, 'retranscribed', ?, ?, 0, ?, ?)`
+      )
+      .run(noteId, engine, model, staleSummaryHash, now);
+    return this.db.prepare("SELECT * FROM note_transcript_sources WHERE note_id = ?").get(noteId);
+  }
+
+  getNoteTranscriptSource(noteId) {
+    if (!this.db) throw new Error("Database not initialized");
+    if (!this._isNoteVisible(noteId)) return null;
+    return (
+      this.db.prepare("SELECT * FROM note_transcript_sources WHERE note_id = ?").get(noteId) || null
+    );
+  }
+
+  clearStaleSummaryHash(noteId) {
+    if (!this.db) throw new Error("Database not initialized");
+    if (!this._isNoteVisible(noteId)) return { success: false };
+    const result = this.db
+      .prepare("UPDATE note_transcript_sources SET stale_summary_hash = NULL WHERE note_id = ?")
+      .run(noteId);
+    return { success: result.changes > 0 };
   }
 
   getPendingFolders(spaceKind = null) {

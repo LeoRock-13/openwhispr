@@ -216,6 +216,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
   buildRetranscribeChunks: (options) =>
     ipcRenderer.invoke("meeting-recordings-build-chunks", options),
   cleanupRetranscribeJob: (jobDir) => ipcRenderer.invoke("meeting-recordings-cleanup-job", jobDir),
+  getNoteTranscriptSource: (noteId) => ipcRenderer.invoke("note-transcript-source-get", noteId),
+  recordRetranscribedSource: (noteId, info) =>
+    ipcRenderer.invoke("note-transcript-source-retranscribed", noteId, info),
+  clearStaleSummaryHash: (noteId) =>
+    ipcRenderer.invoke("note-transcript-source-clear-stale-summary", noteId),
+  onNoteTranscriptSourceChanged: registerListener(
+    "note-transcript-source-changed",
+    (callback) => (_event, payload) => callback(payload)
+  ),
   retryTranscription: (id, settings) => ipcRenderer.invoke("retry-transcription", id, settings),
   updateTranscriptionText: (id, text, rawText) =>
     ipcRenderer.invoke("update-transcription-text", id, text, rawText),
