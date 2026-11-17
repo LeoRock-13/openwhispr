@@ -1788,6 +1788,26 @@ class DatabaseManager {
         )
       `);
 
+      // FORK: stored meeting audio, one row per recording session of a note.
+      // Scoped through the note like the speaker tables; the cascade drops the
+      // row on every hard-delete path and MeetingRecordingStorage removes the
+      // file left without one.
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS note_recordings (
+          id TEXT PRIMARY KEY,
+          note_id INTEGER NOT NULL,
+          file_name TEXT NOT NULL UNIQUE,
+          started_at INTEGER NOT NULL,
+          duration_ms INTEGER,
+          size_bytes INTEGER,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
+        )
+      `);
+      this.db.exec(
+        "CREATE INDEX IF NOT EXISTS idx_note_recordings_note ON note_recordings(note_id, started_at)"
+      );
+
       // A cloud folder delete is optimistic until the API answers. Keep the
       // exact pre-delete row state in a durable journal so a permission denial
       // can revive the same folder, notes, speakers, and conversations even
@@ -11261,6 +11281,92 @@ class DatabaseManager {
       debugLogger.error("Error hard deleting note", { error: error.message }, "database");
       throw error;
     }
+  }
+
+  // FORK: meeting recordings (see specs/meeting-audio-recording/design.md §2.5).
+
+  // Unscoped and idempotent: startup recovery may finish a session recorded
+  // under another account, and may retry one it already saved. Throws on a
+  // missing note (foreign key), so the caller can drop the orphaned file.
+  addNoteRecording({ id, noteId, fileName, startedAt, durationMs = null, sizeBytes = null }) {
+    if (!this.db) throw new Error("Database not initialized");
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO note_recordings
+           (id, note_id, file_name, started_at, duration_ms, size_bytes)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(id, noteId, fileName, startedAt, durationMs, sizeBytes);
+    return this.getNoteRecordingById(id);
+  }
+
+  _noteRecordingScope() {
+    const accountScope = this._accountScopeCondition("n");
+    return {
+      from: `note_recordings r JOIN notes n ON n.id = r.note_id`,
+      sql: accountScope.sql,
+      params: accountScope.params,
+    };
+  }
+
+  getNoteRecordings(noteId) {
+    if (!this.db) throw new Error("Database not initialized");
+    const scope = this._noteRecordingScope();
+    return this.db
+      .prepare(
+        `SELECT r.* FROM ${scope.from}
+         WHERE r.note_id = ? AND ${scope.sql}
+         ORDER BY r.started_at, r.id`
+      )
+      .all(noteId, ...scope.params);
+  }
+
+  getNoteRecording(id) {
+    if (!this.db) throw new Error("Database not initialized");
+    const scope = this._noteRecordingScope();
+    return (
+      this.db
+        .prepare(`SELECT r.* FROM ${scope.from} WHERE r.id = ? AND ${scope.sql}`)
+        .get(id, ...scope.params) || null
+    );
+  }
+
+  // Unscoped: for the storage layer's own bookkeeping, never for the renderer.
+  getNoteRecordingById(id) {
+    if (!this.db) throw new Error("Database not initialized");
+    return this.db.prepare("SELECT * FROM note_recordings WHERE id = ?").get(id) || null;
+  }
+
+  deleteNoteRecording(id) {
+    if (!this.db) throw new Error("Database not initialized");
+    const result = this.db.prepare("DELETE FROM note_recordings WHERE id = ?").run(id);
+    return { success: result.changes > 0 };
+  }
+
+  // Device-wide like dictation audio cleanup: an account that has left this
+  // device must not keep a recording past the period Settings promises.
+  getExpiredNoteRecordings(cutoffMs) {
+    if (!this.db) throw new Error("Database not initialized");
+    return this.db
+      .prepare("SELECT * FROM note_recordings WHERE started_at < ? ORDER BY started_at")
+      .all(cutoffMs);
+  }
+
+  getAllNoteRecordingFileNames() {
+    if (!this.db) throw new Error("Database not initialized");
+    return this.db
+      .prepare("SELECT file_name FROM note_recordings")
+      .all()
+      .map((row) => row.file_name);
+  }
+
+  // The active account's recordings only, like the dictation storage figure.
+  getVisibleNoteRecordings() {
+    if (!this.db) throw new Error("Database not initialized");
+    const scope = this._noteRecordingScope();
+    return this.db
+      .prepare(`SELECT r.* FROM ${scope.from} WHERE ${scope.sql} ORDER BY r.started_at`)
+      .all(...scope.params);
   }
 
   getPendingFolders(spaceKind = null) {

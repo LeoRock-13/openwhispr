@@ -544,6 +544,74 @@ async function mergeAudioSegments(segments) {
   }
 }
 
+// FORK: a meeting recording is two raw mono s16le captures of equal length
+// (mic, system). Joined into one stereo Opus file, left = mic, right = system,
+// so the channels can be split again for re-transcription.
+function encodeStereoPcmToOpus(micPcmPath, systemPcmPath, outputPath, options = {}) {
+  const { sampleRate = 24000, audioBitrate = "48k", signal } = options;
+  const rawInput = (inputPath) => [
+    "-f",
+    "s16le",
+    "-ar",
+    String(sampleRate),
+    "-ac",
+    "1",
+    "-i",
+    inputPath,
+  ];
+
+  debugLogger.debug("Encoding meeting recording with FFmpeg", {
+    mic: micPcmPath,
+    system: systemPcmPath,
+    output: outputPath,
+  });
+
+  return runFFmpegConversion(
+    [
+      ...rawInput(micPcmPath),
+      ...rawInput(systemPcmPath),
+      "-filter_complex",
+      "[0:a][1:a]join=inputs=2:channel_layout=stereo:map=0.0-FL|1.0-FR[a]",
+      "-map",
+      "[a]",
+      "-c:a",
+      "libopus",
+      "-b:a",
+      audioBitrate,
+      "-application",
+      "voip",
+      "-f",
+      "webm",
+    ],
+    outputPath,
+    { signal }
+  );
+}
+
+// FORK: one channel of a stereo recording as a mono PCM WAV (0 = left/mic,
+// 1 = right/system), the shape the local engines and diarization read as-is.
+function extractChannelToWav(inputPath, channel, outputPath, options = {}) {
+  const { sampleRate = 16000, signal } = options;
+  if (channel !== 0 && channel !== 1) {
+    return Promise.reject(new Error(`Invalid channel ${channel}: expected 0 or 1`));
+  }
+  return runFFmpegConversion(
+    [
+      "-i",
+      inputPath,
+      "-vn",
+      "-af",
+      `pan=mono|c0=c${channel}`,
+      "-ar",
+      String(sampleRate),
+      "-c:a",
+      "pcm_s16le",
+    ],
+    outputPath,
+    { signal }
+  );
+}
+
 function clearCache() {
   cachedFFmpegPath = null;
 }
@@ -561,5 +629,7 @@ module.exports = {
   wavToFloat32Samples,
   computeFloat32RMS,
   mergeAudioSegments,
+  encodeStereoPcmToOpus,
+  extractChannelToWav,
   clearCache,
 };

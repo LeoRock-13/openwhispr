@@ -136,3 +136,81 @@ test(
     }
   }
 );
+
+// FORK: meeting recordings (specs/meeting-audio-recording/design.md §2.1, §3.1).
+const {
+  encodeStereoPcmToOpus,
+  extractChannelToWav,
+  computeFloat32RMS,
+} = require("../../src/helpers/ffmpegUtils");
+
+function rawTone(seconds, { frequency = 440, amplitude = 0.5, sampleRate = 24000 } = {}) {
+  const samples = Math.round(seconds * sampleRate);
+  const buffer = Buffer.alloc(samples * 2);
+  for (let i = 0; i < samples; i++) {
+    const value = amplitude * Math.sin((2 * Math.PI * frequency * i) / sampleRate);
+    buffer.writeInt16LE(Math.round(value * 32767), i * 2);
+  }
+  return buffer;
+}
+
+const channelRms = (wavPath) => computeFloat32RMS(wavToFloat32Samples(fs.readFileSync(wavPath)));
+
+test(
+  "a meeting recording keeps mic on the left and system on the right",
+  { skip: !ffmpegPath && "no ffmpeg binary available" },
+  async (t) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ow-meeting-stereo-"));
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    const mic = path.join(dir, "mic.pcm");
+    const system = path.join(dir, "system.pcm");
+    fs.writeFileSync(mic, rawTone(2));
+    fs.writeFileSync(system, Buffer.alloc(rawTone(2).length)); // silence
+    const webm = path.join(dir, "meeting.webm");
+
+    await encodeStereoPcmToOpus(mic, system, webm);
+
+    const streams = streamsOf(webm);
+    assert.match(streams, /Audio: opus/);
+    assert.match(streams, /stereo/);
+    assert.match(streams, /Duration: 00:00:0[12]\./);
+
+    const left = path.join(dir, "left.wav");
+    const right = path.join(dir, "right.wav");
+    await extractChannelToWav(webm, 0, left);
+    await extractChannelToWav(webm, 1, right);
+
+    const leftFormat = parseWavFormat(fs.readFileSync(left));
+    assert.equal(leftFormat.channels, 1);
+    assert.equal(leftFormat.sampleRate, 16000);
+    assert.ok(channelRms(left) > 0.2, `mic channel too quiet: ${channelRms(left)}`);
+    assert.ok(channelRms(right) < 0.01, `system channel should be silent: ${channelRms(right)}`);
+  }
+);
+
+test(
+  "a meeting recording's system audio comes back from the right channel",
+  { skip: !ffmpegPath && "no ffmpeg binary available" },
+  async (t) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ow-meeting-stereo-"));
+    t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+    const mic = path.join(dir, "mic.pcm");
+    const system = path.join(dir, "system.pcm");
+    fs.writeFileSync(mic, Buffer.alloc(rawTone(1).length));
+    fs.writeFileSync(system, rawTone(1, { frequency: 880 }));
+    const webm = path.join(dir, "meeting.webm");
+    await encodeStereoPcmToOpus(mic, system, webm);
+
+    const left = path.join(dir, "left.wav");
+    const right = path.join(dir, "right.wav");
+    await extractChannelToWav(webm, 0, left);
+    await extractChannelToWav(webm, 1, right);
+
+    assert.ok(channelRms(left) < 0.01, `mic channel should be silent: ${channelRms(left)}`);
+    assert.ok(channelRms(right) > 0.2, `system channel too quiet: ${channelRms(right)}`);
+  }
+);
+
+test("extractChannelToWav rejects a channel other than 0 or 1", async () => {
+  await assert.rejects(extractChannelToWav("in.webm", 2, "out.wav"), /Invalid channel 2/);
+});
